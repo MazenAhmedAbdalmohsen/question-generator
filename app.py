@@ -90,9 +90,6 @@ Requirements:
             st.error(f"Failed to generate questions: {str(e)}")
         return []
 
-# Initialize text variable
-text = ""
-
 # Main app layout
 st.set_page_config(page_title="AI Quiz Generator", layout="wide")
 st.title("🧠 AI Quiz Generator")
@@ -114,19 +111,30 @@ if input_method == "📄 Upload PDF or Text File":
     uploaded_file = st.file_uploader("Upload a file", type=["pdf", "txt"])
     if uploaded_file:
         text = extract_text_from_file(uploaded_file)
+        if text.strip():
+            # Show generate button only after file is uploaded and has content
+            if st.button("✨ Generate Questions", key="generate_from_file"):
+                with st.spinner("Generating questions..."):
+                    st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
+                    if st.session_state.questions:  # Only reset if questions were generated
+                        st.session_state.user_answers = []
+                        st.session_state.score = 0
+                        st.session_state.current_question = 0
+                        st.session_state.quiz_complete = False
+        else:
+            st.warning("The uploaded file appears to be empty")
 else:
     text = st.text_area("Enter your text here:", height=200, value="")
-
-# Only show Generate Quiz button if we have text
-if text and text.strip():
-    if st.button("✨ Generate Quiz"):
-        with st.spinner("Generating questions..."):
-            st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
-            if st.session_state.questions:  # Only reset if questions were generated
-                st.session_state.user_answers = []
-                st.session_state.score = 0
-                st.session_state.current_question = 0
-                st.session_state.quiz_complete = False
+    if text.strip():
+        # Show generate button only when text is entered
+        if st.button("✨ Generate Questions", key="generate_from_text"):
+            with st.spinner("Generating questions..."):
+                st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
+                if st.session_state.questions:  # Only reset if questions were generated
+                    st.session_state.user_answers = []
+                    st.session_state.score = 0
+                    st.session_state.current_question = 0
+                    st.session_state.quiz_complete = False
 else:
     st.warning("Please provide some text content or upload a file")
 
