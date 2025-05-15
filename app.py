@@ -36,6 +36,8 @@ if configure_google_api():
         model = None
 
 def extract_text_from_file(uploaded_file):
+    if uploaded_file is None:
+        return ""
     if uploaded_file.type == "application/pdf":
         pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file.read()))
         return "\n".join([page.extract_text() for page in pdf_reader.pages])
@@ -48,6 +50,10 @@ def extract_text_from_file(uploaded_file):
 def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
     if not model:
         st.error("Model not initialized. Please check API key and model availability.")
+        return []
+    
+    if not text.strip():
+        st.error("Please provide some text content")
         return []
     
     num_easy = int(total_questions * (easy_pct/100))
@@ -78,11 +84,14 @@ Requirements:
         return json.loads(json_str)
     except Exception as e:
         if "429" in str(e):
-            st.error("Quota exceeded. Please wait and try again, switch to Gemini 1.5 Flash, or enable billing for higher limits.")
+            st.error("Quota exceeded. Please wait and try again.")
             time.sleep(26)
         else:
             st.error(f"Failed to generate questions: {str(e)}")
         return []
+
+# Initialize text variable
+text = ""
 
 # Main app layout
 st.set_page_config(page_title="AI Quiz Generator", layout="wide")
@@ -106,15 +115,20 @@ if input_method == "📄 Upload PDF or Text File":
     if uploaded_file:
         text = extract_text_from_file(uploaded_file)
 else:
-    text = st.text_area("Enter your text here:", height=200)
+    text = st.text_area("Enter your text here:", height=200, value="")
 
-if text and st.button("✨ Generate Quiz"):
-    with st.spinner("Generating questions..."):
-        st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
-        st.session_state.user_answers = []
-        st.session_state.score = 0
-        st.session_state.current_question = 0
-        st.session_state.quiz_complete = False
+# Only show Generate Quiz button if we have text
+if text and text.strip():
+    if st.button("✨ Generate Quiz"):
+        with st.spinner("Generating questions..."):
+            st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
+            if st.session_state.questions:  # Only reset if questions were generated
+                st.session_state.user_answers = []
+                st.session_state.score = 0
+                st.session_state.current_question = 0
+                st.session_state.quiz_complete = False
+else:
+    st.warning("Please provide some text content or upload a file")
 
 # Quiz display logic
 if st.session_state.questions and not st.session_state.quiz_complete:
