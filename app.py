@@ -12,6 +12,8 @@ if 'current_question' not in st.session_state:
     st.session_state.current_question = 0
 if 'score' not in st.session_state:
     st.session_state.score = 0
+if 'user_answers' not in st.session_state:
+    st.session_state.user_answers = []
 
 def configure_google_api():
     if "GOOGLE_API_KEY" in os.environ:
@@ -74,7 +76,7 @@ Requirements:
     except Exception as e:
         if "429" in str(e):
             st.error("Quota exceeded. Please wait and try again, switch to Gemini 1.5 Flash, or enable billing for higher limits. See: https://ai.google.dev/gemini-api/docs/rate-limits")
-            time.sleep(26)  # Respect retry_delay
+            time.sleep(26)
         else:
             st.error(f"Failed to generate questions: {str(e)}")
         return []
@@ -100,33 +102,47 @@ if input_method == "Upload PDF or Text File":
         text = extract_text_from_file(uploaded_file)
         if text and st.button("Generate Q&A"):
             st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
+            st.session_state.user_answers = []
 else:
     user_text = st.text_area("Enter your text here:", height=200)
     if user_text and st.button("Generate Q&A"):
         st.session_state.questions = generate_questions(user_text, total_questions, easy_pct, mid_pct, hard_pct)
+        st.session_state.user_answers = []
 
 if st.session_state.questions:
     q = st.session_state.questions[st.session_state.current_question]
     st.write(f"**Question {st.session_state.current_question + 1} ({q['difficulty']}):** {q['question']}")
     for opt in q['options']:
-        if st.button(opt, key=f"opt_{opt}"):
+        if st.button(opt, key=f"opt_{opt}_{st.session_state.current_question}"):
+            st.session_state.user_answers.append({"question": q['question'], "selected": opt, "correct": q['correct'], "explanation": q['explanation']})
             if opt == q['correct']:
                 st.success("Correct!")
                 st.session_state.score += 1
             else:
                 st.error(f"Incorrect. {q['explanation']}")
+            st.write(f"**Current Score:** {st.session_state.score}/{st.session_state.current_question + 1}")
             st.session_state.current_question += 1
             if st.session_state.current_question >= len(st.session_state.questions):
-                st.write(f"Quiz complete! Your score: {st.session_state.score}/{len(st.session_state.questions)}")
+                st.write(f"**Quiz Complete! Final Score:** {st.session_state.score}/{len(st.session_state.questions)}")
+                st.markdown("### Review of Your Answers")
+                for i, ans in enumerate(st.session_state.user_answers, 1):
+                    status = "✅ Correct" if ans['selected'] == ans['correct'] else "❌ Incorrect"
+                    st.markdown(f"**Question {i}:** {ans['question']}")
+                    st.markdown(f"- **Your Answer:** {ans['selected']} ({status})")
+                    st.markdown(f"- **Correct Answer:** {ans['correct']}")
+                    st.markdown(f"- **Explanation:** {ans['explanation']}")
+                    st.markdown("---")
                 st.session_state.current_question = 0
                 st.session_state.questions = []
                 st.session_state.score = 0
+                st.session_state.user_answers = []
             st.rerun()
 
 if st.button("Reset Quiz"):
     st.session_state.questions = []
     st.session_state.current_question = 0
     st.session_state.score = 0
+    st.session_state.user_answers = []
     st.rerun()
 
 st.markdown("---")
