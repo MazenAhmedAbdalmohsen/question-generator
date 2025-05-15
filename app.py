@@ -123,8 +123,15 @@ if st.session_state.questions:
             st.write(f"**Current Score:** {st.session_state.score}/{st.session_state.current_question + 1}")
             st.session_state.current_question += 1
             if st.session_state.current_question >= len(st.session_state.questions):
-                st.write(f"**Quiz Complete! Final Score:** {st.session_state.score}/{len(st.session_state.questions)}")
-                st.markdown("### Review of Your Answers")
+                total_questions = len(st.session_state.questions)
+                correct_answers = st.session_state.score
+                incorrect_answers = total_questions - correct_answers
+                st.markdown(f"**Quiz Complete! Final Score: {correct_answers}/{total_questions}**")
+                st.markdown("### Feedback Summary")
+                st.markdown(f"- **Correct Answers:** {correct_answers}")
+                st.markdown(f"- **Incorrect Answers:** {incorrect_answers}")
+                st.markdown(f"- **Percentage Correct:** {(correct_answers/total_questions)*100:.1f}%")
+                st.markdown("### Detailed Review")
                 for i, ans in enumerate(st.session_state.user_answers, 1):
                     status = "✅ Correct" if ans['selected'] == ans['correct'] else "❌ Incorrect"
                     st.markdown(f"**Question {i}:** {ans['question']}")
