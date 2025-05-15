@@ -138,17 +138,22 @@ if st.session_state.questions and not st.session_state.quiz_complete:
     st.markdown(f"**Difficulty:** :{'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'}[{q['difficulty'].upper()}]")
     st.markdown(f"### {q['question']}")
     
-    selected = st.radio("Select your answer:", 
-                       options=q['options'],
-                       key=f"q_{st.session_state.current_question}",
-                       label_visibility="collapsed")
+    # Create a mapping of option letters to their values
+    options_dict = {chr(65+i): opt for i, opt in enumerate(q['options'])}
+    
+    selected_key = st.radio("Select your answer:",
+                          options=list(options_dict.keys()),
+                          format_func=lambda x: f"{x}) {options_dict[x]}",
+                          key=f"q_{st.session_state.current_question}")
     
     if st.button("Submit Answer"):
-        is_correct = selected == q['correct']
+        is_correct = selected_key == q['correct']
         st.session_state.user_answers.append({
             "question": q['question'],
-            "selected": selected,
-            "correct": q['correct'],
+            "selected": options_dict[selected_key],
+            "selected_key": selected_key,
+            "correct": options_dict[q['correct']],
+            "correct_key": q['correct'],
             "explanation": q['explanation'],
             "is_correct": is_correct
         })
@@ -157,7 +162,7 @@ if st.session_state.questions and not st.session_state.quiz_complete:
             st.session_state.score += 1
             st.success("✅ Correct!")
         else:
-            st.error(f"❌ Incorrect (Correct answer: {q['correct']})")
+            st.error(f"❌ Incorrect (Correct answer: {q['correct']}) {options_dict[q['correct']]}")
         
         st.markdown(f"**Explanation:** {q['explanation']}")
         
@@ -187,21 +192,14 @@ if st.session_state.quiz_complete:
     with col3:
         st.metric("Percentage", f"{percentage:.1f}%")
     
-    # Difficulty analysis
-    st.subheader("📊 Performance by Difficulty")
-    difficulty_stats = {"Easy": 0, "Medium": 0, "Hard": 0}
-    for q, ans in zip(st.session_state.questions, st.session_state.user_answers):
-        if ans['is_correct']:
-            difficulty_stats[q['difficulty'].capitalize()] += 1
-    
-    st.bar_chart(difficulty_stats)
-    
     # Detailed review
     st.subheader("🔍 Detailed Review")
-    for i, (q, ans) in enumerate(zip(st.session_state.questions, st.session_state.user_answers), 1):
-        with st.expander(f"Question {i}: {q['question']}"):
-            st.markdown(f"**Your Answer:** {'✅ ' if ans['is_correct'] else '❌ '}{ans['selected']}")
-            st.markdown(f"**Correct Answer:** {ans['correct']}")
+    for i, ans in enumerate(st.session_state.user_answers, 1):
+        with st.expander(f"Question {i}: {ans['question']}", expanded=False):
+            status = "✅ Correct" if ans['is_correct'] else "❌ Incorrect"
+            st.markdown(f"**Your Answer:** {status} {ans['selected_key']}) {ans['selected']}")
+            if not ans['is_correct']:
+                st.markdown(f"**Correct Answer:** {ans['correct_key']}) {ans['correct']}")
             st.markdown(f"**Explanation:** {ans['explanation']}")
     
     if st.button("🔄 Start New Quiz"):
