@@ -4,6 +4,7 @@ import json
 from io import BytesIO
 import google.generativeai as genai
 import os
+import time
 
 if 'questions' not in st.session_state:
     st.session_state.questions = []
@@ -24,7 +25,7 @@ def configure_google_api():
 
 if configure_google_api():
     try:
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
         st.error(f"Failed to initialize model: {str(e)}")
         model = None
@@ -71,7 +72,11 @@ Requirements:
         json_str = response.text.strip().replace('```json\n', '').replace('\n```', '')
         return json.loads(json_str)
     except Exception as e:
-        st.error(f"Failed to generate questions: {str(e)}")
+        if "429" in str(e):
+            st.error("Quota exceeded. Please wait and try again, switch to Gemini 1.5 Flash, or enable billing for higher limits. See: https://ai.google.dev/gemini-api/docs/rate-limits")
+            time.sleep(26)  # Respect retry_delay
+        else:
+            st.error(f"Failed to generate questions: {str(e)}")
         return []
 
 st.set_page_config(page_title="Free Quiz Generator", layout="wide")
