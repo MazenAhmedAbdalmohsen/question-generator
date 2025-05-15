@@ -103,18 +103,26 @@ if input_method == "Upload PDF or Text File":
         if text and st.button("Generate Q&A"):
             st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
             st.session_state.user_answers = []
+            st.session_state.score = 0
 else:
     user_text = st.text_area("Enter your text here:", height=200)
     if user_text and st.button("Generate Q&A"):
         st.session_state.questions = generate_questions(user_text, total_questions, easy_pct, mid_pct, hard_pct)
         st.session_state.user_answers = []
+        st.session_state.score = 0
 
 if st.session_state.questions:
     q = st.session_state.questions[st.session_state.current_question]
     st.write(f"**Question {st.session_state.current_question + 1} ({q['difficulty']}):** {q['question']}")
     for opt in q['options']:
         if st.button(opt, key=f"opt_{opt}_{st.session_state.current_question}"):
-            st.session_state.user_answers.append({"question": q['question'], "selected": opt, "correct": q['correct'], "explanation": q['explanation']})
+            answer_data = {
+                "question": q['question'],
+                "selected": opt,
+                "correct": q['correct'],
+                "explanation": q['explanation']
+            }
+            st.session_state.user_answers.append(answer_data)
             if opt == q['correct']:
                 st.success("Correct!")
                 st.session_state.score += 1
@@ -126,13 +134,17 @@ if st.session_state.questions:
                 total_questions = len(st.session_state.questions)
                 correct_answers = st.session_state.score
                 incorrect_answers = total_questions - correct_answers
-                st.markdown(f"**Quiz Complete! Final Score: {correct_answers}/{total_questions}**")
+                st.markdown("### Quiz Completed!")
+                st.markdown(f"**Final Score: {correct_answers}/{total_questions}**")
                 st.markdown("### Feedback Summary")
                 st.markdown(f"- **Correct Answers:** {correct_answers}")
                 st.markdown(f"- **Incorrect Answers:** {incorrect_answers}")
                 st.markdown(f"- **Percentage Correct:** {(correct_answers/total_questions)*100:.1f}%")
-                st.markdown("### Detailed Review")
+                st.markdown("### Detailed Review of Answers")
                 for i, ans in enumerate(st.session_state.user_answers, 1):
+                    if not all(k in ans for k in ["question", "selected", "correct", "explanation"]):
+                        st.error(f"Error: Invalid answer data for question {i}. Skipping.")
+                        continue
                     status = "✅ Correct" if ans['selected'] == ans['correct'] else "❌ Incorrect"
                     st.markdown(f"**Question {i}:** {ans['question']}")
                     st.markdown(f"- **Your Answer:** {ans['selected']} ({status})")
