@@ -17,6 +17,8 @@ if 'user_answers' not in st.session_state:
     st.session_state.user_answers = []
 if 'quiz_complete' not in st.session_state:
     st.session_state.quiz_complete = False
+if 'text_content' not in st.session_state:
+    st.session_state.text_content = ""
 
 def configure_google_api():
     if "GOOGLE_API_KEY" in os.environ:
@@ -38,13 +40,17 @@ if configure_google_api():
 def extract_text_from_file(uploaded_file):
     if uploaded_file is None:
         return ""
-    if uploaded_file.type == "application/pdf":
-        pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file.read()))
-        return "\n".join([page.extract_text() for page in pdf_reader.pages])
-    elif uploaded_file.type == "text/plain":
-        return uploaded_file.read().decode("utf-8")
-    else:
-        st.error("Unsupported file type. Please upload a PDF or text file.")
+    try:
+        if uploaded_file.type == "application/pdf":
+            pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file.read()))
+            return "\n".join([page.extract_text() for page in pdf_reader.pages])
+        elif uploaded_file.type == "text/plain":
+            return uploaded_file.read().decode("utf-8")
+        else:
+            st.error("Unsupported file type. Please upload a PDF or text file.")
+            return ""
+    except Exception as e:
+        st.error(f"Error reading file: {str(e)}")
         return ""
 
 def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
@@ -82,6 +88,9 @@ Requirements:
         response = model.generate_content(prompt)
         json_str = response.text.strip().replace('```json\n', '').replace('\n```', '')
         return json.loads(json_str)
+    except json.JSONDecodeError:
+        st.error("Failed to parse questions. Please try again with different content.")
+        return []
     except Exception as e:
         if "429" in str(e):
             st.error("Quota exceeded. Please wait and try again.")
@@ -105,38 +114,59 @@ with st.sidebar:
     st.markdown("### 🔒 Security Note\nYour API key is securely stored")
 
 # Input method selection
-input_method = st.radio("Choose input method:", ("📄 Upload PDF or Text File", "✍️ Enter Text"), horizontal=True)
+input_method = st.radio("Choose input method:", 
+                       ("📄 Upload PDF or Text File", "✍️ Enter Text"), 
+                       horizontal=True,
+                       key="input_method")
 
 if input_method == "📄 Upload PDF or Text File":
-    uploaded_file = st.file_uploader("Upload a file", type=["pdf", "txt"])
+    uploaded_file = st.file_uploader("Upload a file", 
+                                   type=["pdf", "txt"], 
+                                   key="file_uploader")
     if uploaded_file:
-        text = extract_text_from_file(uploaded_file)
-        if text.strip():
-            # Show generate button only after file is uploaded and has content
+        st.session_state.text_content = extract_text_from_file(uploaded_file)
+        if st.session_state.text_content.strip():
+            st.success("File uploaded successfully!")
             if st.button("✨ Generate Questions", key="generate_from_file"):
                 with st.spinner("Generating questions..."):
-                    st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
-                    if st.session_state.questions:  # Only reset if questions were generated
+                    st.session_state.questions = generate_questions(
+                        st.session_state.text_content, 
+                        total_questions, 
+                        easy_pct, 
+                        mid_pct, 
+                        hard_pct
+                    )
+                    if st.session_state.questions:
                         st.session_state.user_answers = []
                         st.session_state.score = 0
                         st.session_state.current_question = 0
                         st.session_state.quiz_complete = False
+                        st.rerun()
         else:
             st.warning("The uploaded file appears to be empty")
 else:
-    text = st.text_area("Enter your text here:", height=200, value="")
-    if text.strip():
-        # Show generate button only when text is entered
+    st.session_state.text_content = st.text_area(
+        "Enter your text here:", 
+        height=200, 
+        value=st.session_state.text_content,
+        key="text_input"
+    )
+    if st.session_state.text_content.strip():
         if st.button("✨ Generate Questions", key="generate_from_text"):
             with st.spinner("Generating questions..."):
-                st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
-                if st.session_state.questions:  # Only reset if questions were generated
+                st.session_state.questions = generate_questions(
+                    st.session_state.text_content, 
+                    total_questions, 
+                    easy_pct, 
+                    mid_pct, 
+                    hard_pct
+                )
+                if st.session_state.questions:
                     st.session_state.user_answers = []
                     st.session_state.score = 0
                     st.session_state.current_question = 0
                     st.session_state.quiz_complete = False
-else:
-    st.warning("Please provide some text content or upload a file")
+                    st.rerun()
 
 # Quiz display logic
 if st.session_state.questions and not st.session_state.quiz_complete:
@@ -154,7 +184,7 @@ if st.session_state.questions and not st.session_state.quiz_complete:
                           format_func=lambda x: f"{x}) {options_dict[x]}",
                           key=f"q_{st.session_state.current_question}")
     
-    if st.button("Submit Answer"):
+    if st.button("Submit Answer", key=f"submit_{st.session_state.current_question}"):
         is_correct = selected_key == q['correct']
         st.session_state.user_answers.append({
             "question": q['question'],
@@ -199,6 +229,15 @@ if st.session_state.quiz_complete:
         st.metric("Incorrect Answers", f"{total - correct}/{total}")
     with col3:
         st.metric("Percentage", f"{percentage:.1f}%")
+    
+    # Difficulty analysis
+    st.subheader("📊 Performance by Difficulty")
+    difficulty_stats = {"Easy": 0, "Medium": 0, "Hard": 0}
+    for q, ans in zip(st.session_state.questions, st.session_state.user_answers):
+        if ans['is_correct']:
+            difficulty_stats[q['difficulty'].capitalize()] += 1
+    
+    st.bar_chart(difficulty_stats)
     
     # Detailed review
     st.subheader("🔍 Detailed Review")
