@@ -230,32 +230,47 @@ if st.session_state.quiz_complete:
     with col3:
         st.metric("Percentage", f"{percentage:.1f}%")
     
+    # Fixed Difficulty analysis
+    st.subheader("📊 Performance by Difficulty")
+    difficulty_stats = {"Easy": 0, "Medium": 0, "Hard": 0}
+    for q, ans in zip(st.session_state.questions, st.session_state.user_answers):
+        if ans['is_correct']:
+            if q['difficulty'] == 'easy':
+                difficulty_stats["Easy"] += 1
+            elif q['difficulty'] == 'mid':
+                difficulty_stats["Medium"] += 1
+            elif q['difficulty'] == 'hard':
+                difficulty_stats["Hard"] += 1
+    
+    st.bar_chart(difficulty_stats)
+    
+    # Score summary
+    correct = st.session_state.score
+    total = len(st.session_state.questions)
+    percentage = (correct / total) * 100
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Correct Answers", f"{correct}/{total}")
+    with col2:
+        st.metric("Incorrect Answers", f"{total - correct}/{total}")
+    with col3:
+        st.metric("Percentage", f"{percentage:.1f}%")
+    
     # Difficulty analysis
     st.subheader("📊 Performance by Difficulty")
     difficulty_stats = {"Easy": 0, "Medium": 0, "Hard": 0}
     for q, ans in zip(st.session_state.questions, st.session_state.user_answers):
         if ans['is_correct']:
-            difficulty_stats[q['difficulty'].capitalize()] += 1
-    
+        # Map the difficulty to our standardized labels
+        if q['difficulty'] == 'easy':
+            difficulty_stats["Easy"] += 1
+        elif q['difficulty'] == 'mid':
+            difficulty_stats["Medium"] += 1
+        elif q['difficulty'] == 'hard':
+            difficulty_stats["Hard"] += 1
+
     st.bar_chart(difficulty_stats)
-    
-    # Detailed review
-    st.subheader("🔍 Detailed Review")
-    for i, ans in enumerate(st.session_state.user_answers, 1):
-        with st.expander(f"Question {i}: {ans['question']}", expanded=False):
-            status = "✅ Correct" if ans['is_correct'] else "❌ Incorrect"
-            st.markdown(f"**Your Answer:** {status} {ans['selected_key']}) {ans['selected']}")
-            if not ans['is_correct']:
-                st.markdown(f"**Correct Answer:** {ans['correct_key']}) {ans['correct']}")
-            st.markdown(f"**Explanation:** {ans['explanation']}")
-    
-    if st.button("🔄 Start New Quiz"):
-        st.session_state.questions = []
-        st.session_state.current_question = 0
-        st.session_state.score = 0
-        st.session_state.user_answers = []
-        st.session_state.quiz_complete = False
-        st.rerun()
 
 # Reset button (visible during quiz)
 if st.session_state.questions and not st.session_state.quiz_complete:
