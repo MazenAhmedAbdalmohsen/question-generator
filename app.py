@@ -23,7 +23,11 @@ def configure_google_api():
     return True
 
 if configure_google_api():
-    model = genai.GenerativeModel('gemini-pro')
+    try:
+        model = genai.GenerativeModel('gemini-1.5-pro')
+    except Exception as e:
+        st.error(f"Failed to initialize model: {str(e)}")
+        model = None
 
 def extract_text_from_file(uploaded_file):
     if uploaded_file.type == "application/pdf":
@@ -36,6 +40,10 @@ def extract_text_from_file(uploaded_file):
         return ""
 
 def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
+    if not model:
+        st.error("Model not initialized. Please check API key and model availability.")
+        return []
+    
     num_easy = int(total_questions * (easy_pct/100))
     num_mid = int(total_questions * (mid_pct/100))
     num_hard = total_questions - num_easy - num_mid
