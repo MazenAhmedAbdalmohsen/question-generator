@@ -3,6 +3,7 @@ import PyPDF2
 import json
 from io import BytesIO
 import google.generativeai as genai
+import os
 
 # Initialize session state
 if 'questions' not in st.session_state:
