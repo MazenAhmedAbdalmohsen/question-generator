@@ -1,7 +1,7 @@
 import streamlit as st
-import PyPDF2
 import json
-import requests
+from text_processor import extract_text_from_pdf
+from question_generator import generate_questions
 
 # Initialize session state
 if 'questions' not in st.session_state:
@@ -11,84 +11,46 @@ if 'current_question' not in st.session_state:
 if 'score' not in st.session_state:
     st.session_state.score = 0
 
-# --- Helper Functions ---
-def extract_text_from_pdf(uploaded_file):
-    pdf_reader = PyPDF2.PdfReader(uploaded_file)
-    return "\n".join([page.extract_text() for page in pdf_reader.pages])
-
-def generate_with_ollama(text, total_questions, easy_pct, mid_pct, hard_pct):
-    num_easy = int(total_questions * (easy_pct/100))
-    num_mid = int(total_questions * (mid_pct/100))
-    num_hard = total_questions - num_easy - num_mid
-    
-    prompt = f"""Generate {total_questions} MCQs from this text:
-{text[:3000]}
-
-Format as JSON with:
-- {num_easy} easy (recall)
-- {num_mid} medium (application) 
-- {num_hard} hard (analysis)
-Each with: question, options[A-D], correct, difficulty, explanation"""
-
-    try:
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "llama2",
-                "prompt": prompt,
-                "format": "json",
-                "stream": False
-            }
-        )
-        return json.loads(response.json()["response"])
-    except Exception as e:
-        st.error(f"Error: {str(e)}. Make sure Ollama is running locally!")
-        return []
-
-# --- UI Layout ---
+# UI Layout
 st.title("📚 Free AI Question Generator")
-st.caption("No API keys needed - Uses local Ollama LLM")
+st.caption("Generate MCQs from PDF or text using OpenAI API (requires API key)")
 
+# Sidebar for settings
 with st.sidebar:
     st.markdown("### ⚙️ Quiz Settings")
-    total_questions = st.slider("Total questions", 5, 20, 10)
-    easy_pct = st.slider("% Easy", 0, 100, 30)
-    mid_pct = st.slider("% Medium", 0, 100, 50)
-    hard_pct = 100 - easy_pct - mid_pct
-    st.metric("Hard questions", f"{hard_pct}%")
+    api_key = st.text_input("OpenAI API Key", type="password")
+    num_easy = st.slider("Number of Easy Questions", 0, 10, 7)
+    num_mid = st.slider("Number of Medium Questions", 0, 10, 7)
+    st.markdown("**Instructions**: Provide an OpenAI API key and upload a PDF or paste text to generate questions.")
 
-    st.markdown("""
-    **First time setup:**
-    1. Install [Ollama](https://ollama.ai/)
-    2. Run in terminal:
-    ```bash
-    ollama pull llama2
-    ollama serve
-    ```
-    """)
-
-# Input Options
+# Input tabs
 tab1, tab2 = st.tabs(["📁 Upload File", "✍️ Paste Text"])
 input_text = ""
 
 with tab1:
-    uploaded_file = st.file_uploader("PDF or Text", type=["pdf","txt"])
+    uploaded_file = st.file_uploader("Upload PDF or Text", type=["pdf", "txt"])
     if uploaded_file:
-        input_text = extract_text_from_pdf(uploaded_file) if uploaded_file.type == "application/pdf" else uploaded_file.getvalue().decode()
+        try:
+            input_text = extract_text_from_pdf(uploaded_file) if uploaded_file.type == "application/pdf" else uploaded_file.getvalue().decode()
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
 
 with tab2:
-    input_text = st.text_area("Content", height=200)
+    input/DVD_text = st.text_area("Paste Content", height=200)
 
-if st.button("Generate Quiz") and input_text.strip():
-    with st.spinner(f"Creating {total_questions} questions..."):
-        questions = generate_with_ollama(input_text, total_questions, easy_pct, mid_pct, hard_pct)
-        if questions:
+# Generate quiz
+if st.button("Generate Quiz") and input_text.strip() and api_key:
+    with st.spinner(f"Creating {num_easy + num_mid} questions..."):
+        questions = generate_questions(input_text, num_easy, num_mid, api_key)
+        if questions and not any("error" in q for q in questions):
             st.session_state.questions = questions
             st.session_state.current_question = 0
             st.session_state.score = 0
-            st.success("Done!")
+            st.success("Quiz generated!")
+        else:
+            st.error("Failed to generate questions. Check API key or input text.")
 
-# Quiz Display
+# Quiz display
 if st.session_state.questions:
     st.divider()
     q = st.session_state.questions[st.session_state.current_question]
@@ -104,13 +66,13 @@ if st.session_state.questions:
             st.success("Correct!")
         else:
             st.error(f"Wrong! Correct: {q['correct']}")
-        st.info(f"💡 {q.get('explanation','')}")
+        st.info(f"💡 {q.get('explanation', 'No explanation provided')}")
         
-        if st.session_state.current_question < len(st.session_state.questions)-1:
+        if st.session_state.current_question < len(st.session_state.questions) - 1:
             st.session_state.current_question += 1
             st.rerun()
         else:
             st.balloons()
             st.success(f"Final Score: {st.session_state.score}/{len(st.session_state.questions)}")
 
-    st.progress((st.session_state.current_question+1)/len(st.session_state.questions))
+    st.progress((st.session_state.current_question + 1) / len(st.session_state.questions))
