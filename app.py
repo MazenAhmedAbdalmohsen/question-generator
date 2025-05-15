@@ -5,7 +5,6 @@ from io import BytesIO
 import google.generativeai as genai
 import os
 
-# Initialize session state
 if 'questions' not in st.session_state:
     st.session_state.questions = []
 if 'current_question' not in st.session_state:
@@ -13,12 +12,9 @@ if 'current_question' not in st.session_state:
 if 'score' not in st.session_state:
     st.session_state.score = 0
 
-# --- Google API Setup ---
 def configure_google_api():
-    # Check environment variables first (for deployment)
     if "GOOGLE_API_KEY" in os.environ:
         genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-    # Check Streamlit secrets (for local testing)
     elif "GOOGLE_API_KEY" in st.secrets:
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     else:
@@ -26,14 +22,18 @@ def configure_google_api():
         return False
     return True
 
-# Initialize the model
 if configure_google_api():
     model = genai.GenerativeModel('gemini-pro')
 
-# --- Helper Functions ---
-def extract_text_from_pdf(uploaded_file):
-    pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file.read()))
-    return "\n".join([page.extract_text() for page in pdf_reader.pages])
+def extract_text_from_file(uploaded_file):
+    if uploaded_file.type == "application/pdf":
+        pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file.read()))
+        return "\n".join([page.extract_text() for page in pdf_reader.pages])
+    elif uploaded_file.type == "text/plain":
+        return uploaded_file.read().decode("utf-8")
+    else:
+        st.error("Unsupported file type. Please upload a PDF or text file.")
+        return ""
 
 def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
     num_easy = int(total_questions * (easy_pct/100))
@@ -60,14 +60,12 @@ Requirements:
 
     try:
         response = model.generate_content(prompt)
-        # Extract JSON from response
         json_str = response.text.strip().replace('```json\n', '').replace('\n```', '')
         return json.loads(json_str)
     except Exception as e:
         st.error(f"Failed to generate questions: {str(e)}")
         return []
 
-# --- UI Layout --- (Same as before, just updating the sidebar note)
 st.set_page_config(page_title="Free Quiz Generator", layout="wide")
 st.title("🔗 Public AI Question Generator")
 st.caption("Powered by Google Gemini API")
@@ -79,15 +77,44 @@ with st.sidebar:
     mid_pct = st.slider("% Medium", 0, 100, 50)
     hard_pct = 100 - easy_pct - mid_pct
     st.metric("Hard questions", f"{hard_pct}%")
+    st.markdown("### 🔒 Security Note\nYour Google API key is securely stored and never exposed to users.")
 
-    st.markdown("""
-    ### 🔒 Security Note
-    Your Google API key is securely stored and never exposed to users.
-    """)
+input_method = st.radio("Choose input method:", ("Upload PDF or Text File", "Enter Text"))
 
-# [Rest of the UI code remains exactly the same as previous version]
-# [Keep all the input tabs, quiz display, and reset functionality]
+if input_method == "Upload PDF or Text File":
+    uploaded_file = st.file_uploader("Upload a PDF or Text file", type=["pdf", "txt"])
+    if uploaded_file:
+        text = extract_text_from_file(uploaded_file)
+        if text and st.button("Generate Q&A"):
+            st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
+else:
+    user_text = st.text_area("Enter your text here:", height=200)
+    if user_text and st.button("Generate Q&A"):
+        st.session_state.questions = generate_questions(user_text, total_questions, easy_pct, mid_pct, hard_pct)
 
-# Footer
+if st.session_state.questions:
+    q = st.session_state.questions[st.session_state.current_question]
+    st.write(f"**Question {st.session_state.current_question + 1} ({q['difficulty']}):** {q['question']}")
+    for opt in q['options']:
+        if st.button(opt, key=f"opt_{opt}"):
+            if opt == q['correct']:
+                st.success("Correct!")
+                st.session_state.score += 1
+            else:
+                st.error(f"Incorrect. {q['explanation']}")
+            st.session_state.current_question += 1
+            if st.session_state.current_question >= len(st.session_state.questions):
+                st.write(f"Quiz complete! Your score: {st.session_state.score}/{len(st.session_state.questions)}")
+                st.session_state.current_question = 0
+                st.session_state.questions = []
+                st.session_state.score = 0
+            st.rerun()
+
+if st.button("Reset Quiz"):
+    st.session_state.questions = []
+    st.session_state.current_question = 0
+    st.session_state.score = 0
+    st.rerun()
+
 st.markdown("---")
 st.caption("Note: Uses Google's Gemini API for question generation")
