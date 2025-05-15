@@ -26,7 +26,7 @@ def get_hf_token():
         return None
 
 # --- Free Cloud LLM Setup ---
-HF_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1"
+HF_API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-xxl"  # Free tier model
 
 def query_llm(prompt):
     token = get_hf_token()
@@ -36,17 +36,42 @@ def query_llm(prompt):
     headers = {"Authorization": f"Bearer {token}"}
     payload = {
         "inputs": prompt,
-        "parameters": {"max_new_tokens": 1000, "temperature": 0.7}
+        "parameters": {
+            "max_new_tokens": 1000,
+            "temperature": 0.7,
+            "do_sample": True
+        }
     }
+    
     try:
         response = requests.post(HF_API_URL, headers=headers, json=payload)
+        
+        # Handle API response
         if response.status_code == 200:
             return response.json()[0]['generated_text']
+        elif response.status_code == 404:
+            st.error("Model not found. Trying alternative...")
+            return try_alternative_model(prompt)
         else:
-            st.error(f"API Error: {response.text}")
+            st.error(f"API Error {response.status_code}: {response.text[:200]}")
             return None
+            
     except Exception as e:
-        st.error(f"Connection Error: {str(e)}")
+        st.error(f"Connection failed: {str(e)}")
+        return None
+
+def try_alternative_model(prompt):
+    """Fallback to another free model"""
+    alt_url = "https://api-inference.huggingface.co/models/google/gemma-7b"
+    try:
+        response = requests.post(
+            alt_url,
+            headers={"Authorization": f"Bearer {get_hf_token()}"},
+            json={"inputs": prompt}
+        )
+        return response.json()[0]['generated_text']
+    except:
+        st.error("All models unavailable. Try again later.")
         return None
 
 # --- Helper Functions ---
@@ -98,6 +123,11 @@ with st.sidebar:
     mid_pct = st.slider("% Medium", 0, 100, 50)
     hard_pct = 100 - easy_pct - mid_pct
     st.metric("Hard questions", f"{hard_pct}%")
+
+    st.markdown("""
+    ### 🔒 Security Note
+    Your API token is securely stored and never exposed to users.
+    """)
 
 # Input Options
 tab1, tab2 = st.tabs(["📁 Upload File", "✍️ Paste Text"])
@@ -168,20 +198,6 @@ if st.session_state.questions:
         st.session_state.questions = []
         st.rerun()
 
-# --- New Deployment Instructions ---
-st.sidebar.markdown("""
-### 🔒 Secure Deployment Guide
-
-1. **For Local Testing**:
-   - Create `.streamlit/secrets.toml` file with:
-     ```toml
-     HF_TOKEN = "your_huggingface_token_here"
-     ```
-
-2. **For Streamlit Cloud**:
-   - Go to: Settings → Secrets
-   - Add:
-     ```toml
-     HF_TOKEN = "your_huggingface_token_here"
-     ```
-""")
+# Footer
+st.markdown("---")
+st.caption("Note: Uses free-tier Hugging Face models. May have rate limits during peak times.")
