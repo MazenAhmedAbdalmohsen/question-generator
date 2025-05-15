@@ -6,6 +6,7 @@ import google.generativeai as genai
 import os
 import time
 
+# Initialize session state
 if 'questions' not in st.session_state:
     st.session_state.questions = []
 if 'current_question' not in st.session_state:
@@ -14,6 +15,8 @@ if 'score' not in st.session_state:
     st.session_state.score = 0
 if 'user_answers' not in st.session_state:
     st.session_state.user_answers = []
+if 'quiz_complete' not in st.session_state:
+    st.session_state.quiz_complete = False
 
 def configure_google_api():
     if "GOOGLE_API_KEY" in os.environ:
@@ -75,14 +78,15 @@ Requirements:
         return json.loads(json_str)
     except Exception as e:
         if "429" in str(e):
-            st.error("Quota exceeded. Please wait and try again, switch to Gemini 1.5 Flash, or enable billing for higher limits. See: https://ai.google.dev/gemini-api/docs/rate-limits")
+            st.error("Quota exceeded. Please wait and try again, switch to Gemini 1.5 Flash, or enable billing for higher limits.")
             time.sleep(26)
         else:
             st.error(f"Failed to generate questions: {str(e)}")
         return []
 
-st.set_page_config(page_title="Free Quiz Generator", layout="wide")
-st.title("🔗 Public AI Question Generator")
+# Main app layout
+st.set_page_config(page_title="AI Quiz Generator", layout="wide")
+st.title("🧠 AI Quiz Generator")
 st.caption("Powered by Google Gemini API")
 
 with st.sidebar:
@@ -92,77 +96,117 @@ with st.sidebar:
     mid_pct = st.slider("% Medium", 0, 100, 50)
     hard_pct = 100 - easy_pct - mid_pct
     st.metric("Hard questions", f"{hard_pct}%")
-    st.markdown("### 🔒 Security Note\nYour Google API key is securely stored and never exposed to users.")
+    st.markdown("### 🔒 Security Note\nYour API key is securely stored")
 
-input_method = st.radio("Choose input method:", ("Upload PDF or Text File", "Enter Text"))
+# Input method selection
+input_method = st.radio("Choose input method:", ("📄 Upload PDF or Text File", "✍️ Enter Text"), horizontal=True)
 
-if input_method == "Upload PDF or Text File":
-    uploaded_file = st.file_uploader("Upload a PDF or Text file", type=["pdf", "txt"])
+if input_method == "📄 Upload PDF or Text File":
+    uploaded_file = st.file_uploader("Upload a file", type=["pdf", "txt"])
     if uploaded_file:
         text = extract_text_from_file(uploaded_file)
-        if text and st.button("Generate Q&A"):
-            st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
-            st.session_state.user_answers = []
-            st.session_state.score = 0
 else:
-    user_text = st.text_area("Enter your text here:", height=200)
-    if user_text and st.button("Generate Q&A"):
-        st.session_state.questions = generate_questions(user_text, total_questions, easy_pct, mid_pct, hard_pct)
+    text = st.text_area("Enter your text here:", height=200)
+
+if text and st.button("✨ Generate Quiz"):
+    with st.spinner("Generating questions..."):
+        st.session_state.questions = generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct)
         st.session_state.user_answers = []
         st.session_state.score = 0
+        st.session_state.current_question = 0
+        st.session_state.quiz_complete = False
 
-if st.session_state.questions:
+# Quiz display logic
+if st.session_state.questions and not st.session_state.quiz_complete:
     q = st.session_state.questions[st.session_state.current_question]
-    st.write(f"**Question {st.session_state.current_question + 1} ({q['difficulty']}):** {q['question']}")
-    for opt in q['options']:
-        if st.button(opt, key=f"opt_{opt}_{st.session_state.current_question}"):
-            answer_data = {
-                "question": q['question'],
-                "selected": opt,
-                "correct": q['correct'],
-                "explanation": q['explanation']
-            }
-            st.session_state.user_answers.append(answer_data)
-            if opt == q['correct']:
-                st.success("Correct!")
-                st.session_state.score += 1
-            else:
-                st.error(f"Incorrect. {q['explanation']}")
-            st.write(f"**Current Score:** {st.session_state.score}/{st.session_state.current_question + 1}")
+    
+    st.subheader(f"Question {st.session_state.current_question + 1} of {len(st.session_state.questions)}")
+    st.markdown(f"**Difficulty:** :{'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'}[{q['difficulty'].upper()}]")
+    st.markdown(f"### {q['question']}")
+    
+    selected = st.radio("Select your answer:", 
+                       options=q['options'],
+                       key=f"q_{st.session_state.current_question}",
+                       label_visibility="collapsed")
+    
+    if st.button("Submit Answer"):
+        is_correct = selected == q['correct']
+        st.session_state.user_answers.append({
+            "question": q['question'],
+            "selected": selected,
+            "correct": q['correct'],
+            "explanation": q['explanation'],
+            "is_correct": is_correct
+        })
+        
+        if is_correct:
+            st.session_state.score += 1
+            st.success("✅ Correct!")
+        else:
+            st.error(f"❌ Incorrect (Correct answer: {q['correct']})")
+        
+        st.markdown(f"**Explanation:** {q['explanation']}")
+        
+        # Move to next question or finish quiz
+        if st.session_state.current_question < len(st.session_state.questions) - 1:
             st.session_state.current_question += 1
-            if st.session_state.current_question >= len(st.session_state.questions):
-                total_questions = len(st.session_state.questions)
-                correct_answers = st.session_state.score
-                incorrect_answers = total_questions - correct_answers
-                st.markdown("### Quiz Completed!")
-                st.markdown(f"**Final Score: {correct_answers}/{total_questions}**")
-                st.markdown("### Feedback Summary")
-                st.markdown(f"- **Correct Answers:** {correct_answers}")
-                st.markdown(f"- **Incorrect Answers:** {incorrect_answers}")
-                st.markdown(f"- **Percentage Correct:** {(correct_answers/total_questions)*100:.1f}%")
-                st.markdown("### Detailed Review of Answers")
-                for i, ans in enumerate(st.session_state.user_answers, 1):
-                    if not all(k in ans for k in ["question", "selected", "correct", "explanation"]):
-                        st.error(f"Error: Invalid answer data for question {i}. Skipping.")
-                        continue
-                    status = "✅ Correct" if ans['selected'] == ans['correct'] else "❌ Incorrect"
-                    st.markdown(f"**Question {i}:** {ans['question']}")
-                    st.markdown(f"- **Your Answer:** {ans['selected']} ({status})")
-                    st.markdown(f"- **Correct Answer:** {ans['correct']}")
-                    st.markdown(f"- **Explanation:** {ans['explanation']}")
-                    st.markdown("---")
-                st.session_state.current_question = 0
-                st.session_state.questions = []
-                st.session_state.score = 0
-                st.session_state.user_answers = []
+            st.rerun()
+        else:
+            st.session_state.quiz_complete = True
             st.rerun()
 
-if st.button("Reset Quiz"):
-    st.session_state.questions = []
-    st.session_state.current_question = 0
-    st.session_state.score = 0
-    st.session_state.user_answers = []
-    st.rerun()
+# Quiz completion screen
+if st.session_state.quiz_complete:
+    st.balloons()
+    st.success("🎉 Quiz Completed!")
+    
+    # Score summary
+    correct = st.session_state.score
+    total = len(st.session_state.questions)
+    percentage = (correct / total) * 100
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Correct Answers", f"{correct}/{total}")
+    with col2:
+        st.metric("Incorrect Answers", f"{total - correct}/{total}")
+    with col3:
+        st.metric("Percentage", f"{percentage:.1f}%")
+    
+    # Difficulty analysis
+    st.subheader("📊 Performance by Difficulty")
+    difficulty_stats = {"Easy": 0, "Medium": 0, "Hard": 0}
+    for q, ans in zip(st.session_state.questions, st.session_state.user_answers):
+        if ans['is_correct']:
+            difficulty_stats[q['difficulty'].capitalize()] += 1
+    
+    st.bar_chart(difficulty_stats)
+    
+    # Detailed review
+    st.subheader("🔍 Detailed Review")
+    for i, (q, ans) in enumerate(zip(st.session_state.questions, st.session_state.user_answers), 1):
+        with st.expander(f"Question {i}: {q['question']}"):
+            st.markdown(f"**Your Answer:** {'✅ ' if ans['is_correct'] else '❌ '}{ans['selected']}")
+            st.markdown(f"**Correct Answer:** {ans['correct']}")
+            st.markdown(f"**Explanation:** {ans['explanation']}")
+    
+    if st.button("🔄 Start New Quiz"):
+        st.session_state.questions = []
+        st.session_state.current_question = 0
+        st.session_state.score = 0
+        st.session_state.user_answers = []
+        st.session_state.quiz_complete = False
+        st.rerun()
+
+# Reset button (visible during quiz)
+if st.session_state.questions and not st.session_state.quiz_complete:
+    if st.button("🔁 Reset Quiz"):
+        st.session_state.questions = []
+        st.session_state.current_question = 0
+        st.session_state.score = 0
+        st.session_state.user_answers = []
+        st.session_state.quiz_complete = False
+        st.rerun()
 
 st.markdown("---")
 st.caption("Note: Uses Google's Gemini API for question generation")
