@@ -5,6 +5,7 @@ from io import BytesIO
 import google.generativeai as genai
 import os
 import time
+from datetime import datetime
 
 # MUST BE FIRST COMMAND
 st.set_page_config(page_title="AI Quiz Generator", layout="wide")
@@ -24,6 +25,8 @@ if 'text_content' not in st.session_state:
     st.session_state.text_content = ""
 if 'language' not in st.session_state:
     st.session_state.language = "en"  # Default to English
+if 'last_api_call' not in st.session_state:
+    st.session_state.last_api_call = 0
 
 # RTL CSS for Arabic
 RTL_CSS = """
@@ -31,6 +34,7 @@ RTL_CSS = """
 .rtl-text {
     direction: rtl;
     text-align: right;
+    font-family: 'Arial', sans-serif;
 }
 .ltr-text {
     direction: ltr;
@@ -86,18 +90,22 @@ translations = {
         "submit_answer": "Submit Answer",
         "your_answer": "**Your Answer:**",
         "correct_answer": "**Correct Answer:**",
+        "api_wait": "Please wait {seconds} seconds before generating more questions",
+        "processing_file": "Processing file...",
+        "api_error": "API Error: Please check your API key and try again",
+        "loading_model": "Loading AI model..."
     },
     "ar": {
-        "title": "🧠 جيلerator الأسئلة الذكاء الاصطناعي",
+        "title": "🧠 منشئ الأسئلة بالذكاء الاصطناعي",
         "caption": "مدعوم بواسطة واجهة برمجة جوجل Gemini",
         "input_method_label": "اختر طريقة الإدخال:",
-        "upload_file_option": "📄 رفع ملف PDF أو نص",
-        "enter_text_option": "✍️ أدخل النص",
-        "upload_prompt": "ارفع ملفًا",
-        "generate_questions_button": "✨ إنشاء أسئلة",
+        "upload_file_option": "📄 رفع ملف PDF أو نصي",
+        "enter_text_option": "✍️ إدخال النص",
+        "upload_prompt": "رفع ملف",
+        "generate_questions_button": "✨ إنشاء الأسئلة",
         "generating_questions": "جارٍ إنشاء الأسئلة...",
         "file_uploaded_successfully": "تم رفع الملف بنجاح!",
-        "empty_file_warning": "يبدو أن الملف الذي تم رفعه فارغ",
+        "empty_file_warning": "يبدو أن الملف المرفوع فارغ",
         "question_format": "السؤال {current} من {total}",
         "difficulty": "الصعوبة",
         "correct": "✅ صحيح!",
@@ -111,40 +119,56 @@ translations = {
         "detailed_review": "🔍 مراجعة تفصيلية",
         "start_new_quiz": "🔄 بدء اختبار جديد",
         "reset_quiz": "🔁 إعادة تعيين الاختبار",
-        "note": "ملاحظة: يستخدم هذا التطبيق واجهة برمجة جوجل Gemini لإنشاء الأسئلة",
+        "note": "ملاحظة: يستخدم واجهة برمجة جوجل Gemini لإنشاء الأسئلة",
         "select_answer": "اختر إجابتك:",
         "submit_answer": "إرسال الإجابة",
         "your_answer": "**إجابتك:**",
         "correct_answer": "**الإجابة الصحيحة:**",
+        "api_wait": "الرجاء الانتظار {seconds} ثانية قبل إنشاء المزيد من الأسئلة",
+        "processing_file": "جارٍ معالجة الملف...",
+        "api_error": "خطأ في الواجهة البرمجية: يرجى التحقق من مفتاح API والمحاولة مرة أخرى",
+        "loading_model": "جارٍ تحميل نموذج الذكاء الاصطناعي..."
     }
 }
 
-# Configure Gemini API
+# Configure Gemini API with caching
+@st.cache_resource(show_spinner=False)
 def configure_google_api():
-    if "GOOGLE_API_KEY" in os.environ:
-        genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-    elif "GOOGLE_API_KEY" in st.secrets:
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    else:
-        st.error("Google API key not configured")
-        return False
-    return True
+    t = translations[st.session_state.language]
+    with st.spinner(t["loading_model"]):
+        if "GOOGLE_API_KEY" in os.environ:
+            genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+        elif "GOOGLE_API_KEY" in st.secrets:
+            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+        else:
+            st.error(t["api_error"])
+            return None
+        
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            return model
+        except Exception as e:
+            st.error(f"{t['api_error']}: {str(e)}")
+            return None
 
-if configure_google_api():
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-    except Exception as e:
-        st.error(f"Failed to initialize model: {str(e)}")
-        model = None
+model = configure_google_api()
 
-# Extract text from file
+# Extract text from file with progress
 def extract_text_from_file(uploaded_file):
+    t = translations[st.session_state.language]
     if uploaded_file is None:
         return ""
+    
+    progress_bar = st.progress(0, text=t["processing_file"])
     try:
         if uploaded_file.type == "application/pdf":
             pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file.read()))
-            return "\n".join([page.extract_text() for page in pdf_reader.pages])
+            text = ""
+            total_pages = len(pdf_reader.pages)
+            for i, page in enumerate(pdf_reader.pages):
+                text += page.extract_text() + "\n"
+                progress_bar.progress((i + 1) / total_pages)
+            return text
         elif uploaded_file.type == "text/plain":
             return uploaded_file.read().decode("utf-8")
         else:
@@ -153,19 +177,31 @@ def extract_text_from_file(uploaded_file):
     except Exception as e:
         st.error(f"Error reading file: {str(e)}")
         return ""
+    finally:
+        progress_bar.empty()
 
-# Generate quiz questions
+# Generate quiz questions with rate limiting
 def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
+    t = translations[st.session_state.language]
+    
+    # Rate limiting - 20 requests per minute
+    current_time = time.time()
+    if current_time - st.session_state.last_api_call < 3:  # 3 second cooldown
+        wait_time = int(3 - (current_time - st.session_state.last_api_call))
+        st.warning(t["api_wait"].format(seconds=wait_time))
+        time.sleep(wait_time)
+    
     if not model:
-        st.error("Model not initialized. Please check API key and model availability.")
+        st.error(t["api_error"])
         return []
+    
     if not text.strip():
         st.error("Please provide some text content")
         return []
 
     num_easy = int(total_questions * (easy_pct / 100))
     num_mid = int(total_questions * (mid_pct / 100))
-    num_hard = total_questions - num_easy - mid_pct
+    num_hard = total_questions - num_easy - num_mid
 
     if st.session_state.language == "ar":
         prompt = f"""قم بإنشاء {total_questions} أسئلة اختيار من متعدد بصيغة JSON من النص التالي:
@@ -201,45 +237,13 @@ Requirements:
 - Only return the JSON array, nothing else"""
 
     try:
-        with st.spinner(translations[st.session_state.language]["generating_questions"]):
-            progress_bar = st.progress(0)
-            chunk_size = max(1, total_questions // 5)  # Break into smaller chunks
-            generated_questions = []
-
-            # Split into chunks if needed
-            parts = [prompt[i:i + 2900] for i in range(0, len(prompt), 2900)]
-
-            for i, part in enumerate(parts):
-                response = model.generate_content(part)
-                json_str = response.text.strip().replace('```json\n', '').replace('\n```', '')
-                try:
-                    part_questions = json.loads(json_str)
-                    generated_questions.extend(part_questions)
-                except json.JSONDecodeError:
-                    st.warning("Some responses had issues but continuing...")
-                finally:
-                    # Update progress bar
-                    progress_bar.progress(min((i + 1) / len(parts), 1.0))
-
-            # Validate questions
-            valid_questions = []
-            for q in generated_questions:
-                if (
-                    isinstance(q, dict) and
-                    "question" in q and
-                    "options" in q and
-                    "correct" in q and
-                    "difficulty" in q and
-                    "explanation" in q
-                ):
-                    valid_questions.append(q)
-
-            # Limit to required number of questions
-            st.session_state.questions = valid_questions[:total_questions]
-            if not st.session_state.questions:
-                st.warning("No valid questions were generated. Try again with different input.")
-            return st.session_state.questions
-
+        st.session_state.last_api_call = time.time()
+        response = model.generate_content(prompt)
+        json_str = response.text.strip().replace('```json\n', '').replace('\n```', '')
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        st.error("Failed to parse questions. Please try again with different content.")
+        return []
     except Exception as e:
         if "429" in str(e):
             st.error("Quota exceeded. Please wait and try again.")
@@ -250,20 +254,20 @@ Requirements:
 
 # Main App UI
 t = translations[st.session_state.language]
-
 st.title(t["title"])
 st.caption(t["caption"])
 
 # Sidebar Settings
 with st.sidebar:
     st.markdown("### ⚙️ Quiz Settings")
-    total_questions = st.slider(t["input_method_label"], 5, 20, 10)
-    easy_pct = st.slider("% Easy", 0, 100, 30)
-    mid_pct = st.slider("% Medium", 0, 100, 50)
+    total_questions = st.slider("Number of Questions" if st.session_state.language == "en" else "عدد الأسئلة", 
+                               5, 20, 10)
+    easy_pct = st.slider("% Easy" if st.session_state.language == "en" else "% سهلة", 0, 100, 30)
+    mid_pct = st.slider("% Medium" if st.session_state.language == "en" else "% متوسطة", 0, 100, 50)
     hard_pct = 100 - easy_pct - mid_pct
-    st.metric("Hard questions", f"{hard_pct}%")
+    st.metric("Hard" if st.session_state.language == "en" else "صعبة", f"{hard_pct}%")
     st.markdown("### 🔒 Security Note")
-    st.markdown("Your API key is securely stored")
+    st.markdown("Your API key is securely stored" if st.session_state.language == "en" else "مفتاح API الخاص بك مخزن بأمان")
 
 # Input Method Selection
 input_method = st.radio(
@@ -285,6 +289,32 @@ if input_method == t["upload_file_option"]:
         if st.session_state.text_content.strip():
             st.success(t["file_uploaded_successfully"])
             if st.button(t["generate_questions_button"], key="generate_from_file"):
+                with st.spinner(t["generating_questions"]):
+                    st.session_state.questions = generate_questions(
+                        st.session_state.text_content,
+                        total_questions,
+                        easy_pct,
+                        mid_pct,
+                        hard_pct
+                    )
+                    if st.session_state.questions:
+                        st.session_state.user_answers = []
+                        st.session_state.score = 0
+                        st.session_state.current_question = 0
+                        st.session_state.quiz_complete = False
+                        st.rerun()
+        else:
+            st.warning(t["empty_file_warning"])
+else:
+    st.session_state.text_content = st.text_area(
+        t["enter_text_option"],
+        height=200,
+        value=st.session_state.text_content,
+        key="text_input"
+    )
+    if st.session_state.text_content.strip():
+        if st.button(t["generate_questions_button"], key="generate_from_text"):
+            with st.spinner(t["generating_questions"]):
                 st.session_state.questions = generate_questions(
                     st.session_state.text_content,
                     total_questions,
@@ -298,35 +328,14 @@ if input_method == t["upload_file_option"]:
                     st.session_state.current_question = 0
                     st.session_state.quiz_complete = False
                     st.rerun()
-        else:
-            st.warning(t["empty_file_warning"])
-else:
-    st.session_state.text_content = st.text_area(
-        t["enter_text_option"],
-        height=200,
-        value=st.session_state.text_content,
-        key="text_input"
-    )
-    if st.session_state.text_content.strip():
-        if st.button(t["generate_questions_button"], key="generate_from_text"):
-            st.session_state.questions = generate_questions(
-                st.session_state.text_content,
-                total_questions,
-                easy_pct,
-                mid_pct,
-                hard_pct
-            )
-            if st.session_state.questions:
-                st.session_state.user_answers = []
-                st.session_state.score = 0
-                st.session_state.current_question = 0
-                st.session_state.quiz_complete = False
-                st.rerun()
 
 # Quiz Display Logic
 if st.session_state.questions and not st.session_state.quiz_complete:
     q = st.session_state.questions[st.session_state.current_question]
-    st.subheader(t["question_format"].format(current=st.session_state.current_question + 1, total=len(st.session_state.questions)))
+    st.subheader(t["question_format"].format(
+        current=st.session_state.current_question + 1,
+        total=len(st.session_state.questions)
+    ))
 
     difficulty_color = 'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'
     st.markdown(f"**{t['difficulty']}:** :{difficulty_color}[{q['difficulty'].upper()}]")
