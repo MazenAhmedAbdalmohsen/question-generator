@@ -25,7 +25,7 @@ if 'text_content' not in st.session_state:
 if 'language' not in st.session_state:
     st.session_state.language = "en"  # Default to English
 
-# Language Direction CSS
+# RTL CSS for Arabic
 RTL_CSS = """
 <style>
 .rtl-text {
@@ -43,7 +43,7 @@ RTL_CSS = """
 with st.sidebar:
     st.markdown("### 🌍 Language")
     lang = st.selectbox(
-        "Choose language",
+        "Select Language",
         ["English", "العربية"],
         index=0 if st.session_state.language == "en" else 1,
         key="lang_selector"
@@ -55,21 +55,21 @@ with st.sidebar:
 lang_dir = "rtl" if st.session_state.language == "ar" else "ltr"
 st.markdown(f'<div class="{lang_dir}-text">', unsafe_allow_html=True)
 
-# Translations
+# Translations dictionary
 translations = {
     "en": {
         "title": "🧠 AI Quiz Generator",
         "caption": "Powered by Google Gemini API",
-        "input_method": "Choose input method:",
-        "upload_file": "📄 Upload PDF or Text File",
-        "enter_text": "✍️ Enter Text",
+        "input_method_label": "Choose input method:",
+        "upload_file_option": "📄 Upload PDF or Text File",
+        "enter_text_option": "✍️ Enter Text",
         "upload_prompt": "Upload a file",
-        "empty_file": "The uploaded file appears to be empty",
-        "generate_questions": "✨ Generate Questions",
+        "generate_questions_button": "✨ Generate Questions",
         "generating_questions": "Generating questions...",
         "file_uploaded_successfully": "File uploaded successfully!",
+        "empty_file_warning": "The uploaded file appears to be empty",
         "question_format": "Question {current} of {total}",
-        "difficulty": "Difficulty:",
+        "difficulty": "Difficulty",
         "correct": "✅ Correct!",
         "incorrect": "❌ Incorrect (Correct answer: {correct})",
         "explanation": "Explanation:",
@@ -82,20 +82,24 @@ translations = {
         "start_new_quiz": "🔄 Start New Quiz",
         "reset_quiz": "🔁 Reset Quiz",
         "note": "Note: Uses Google's Gemini API for question generation",
+        "select_answer": "Select your answer:",
+        "submit_answer": "Submit Answer",
+        "your_answer": "**Your Answer:**",
+        "correct_answer": "**Correct Answer:**",
     },
     "ar": {
         "title": "🧠 جيلerator الأسئلة الذكاء الاصطناعي",
         "caption": "مدعوم بواسطة واجهة برمجة جوجل Gemini",
-        "input_method": "اختر طريقة الإدخال:",
-        "upload_file": "📄 رفع ملف PDF أو نص",
-        "enter_text": "✍️ أدخل النص",
+        "input_method_label": "اختر طريقة الإدخال:",
+        "upload_file_option": "📄 رفع ملف PDF أو نص",
+        "enter_text_option": "✍️ أدخل النص",
         "upload_prompt": "ارفع ملفًا",
-        "empty_file": "يبدو أن الملف الذي تم رفعه فارغ",
-        "generate_questions": "✨ إنشاء أسئلة",
+        "generate_questions_button": "✨ إنشاء أسئلة",
         "generating_questions": "جارٍ إنشاء الأسئلة...",
         "file_uploaded_successfully": "تم رفع الملف بنجاح!",
+        "empty_file_warning": "يبدو أن الملف الذي تم رفعه فارغ",
         "question_format": "السؤال {current} من {total}",
-        "difficulty": "الصعوبة:",
+        "difficulty": "الصعوبة",
         "correct": "✅ صحيح!",
         "incorrect": "❌ خطأ (الإجابة الصحيحة: {correct})",
         "explanation": "التفسير:",
@@ -108,9 +112,14 @@ translations = {
         "start_new_quiz": "🔄 بدء اختبار جديد",
         "reset_quiz": "🔁 إعادة تعيين الاختبار",
         "note": "ملاحظة: يستخدم هذا التطبيق واجهة برمجة جوجل Gemini لإنشاء الأسئلة",
-    },
+        "select_answer": "اختر إجابتك:",
+        "submit_answer": "إرسال الإجابة",
+        "your_answer": "**إجابتك:**",
+        "correct_answer": "**الإجابة الصحيحة:**",
+    }
 }
 
+# Configure Gemini API
 def configure_google_api():
     if "GOOGLE_API_KEY" in os.environ:
         genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
@@ -128,6 +137,7 @@ if configure_google_api():
         st.error(f"Failed to initialize model: {str(e)}")
         model = None
 
+# Extract text from file
 def extract_text_from_file(uploaded_file):
     if uploaded_file is None:
         return ""
@@ -142,8 +152,9 @@ def extract_text_from_file(uploaded_file):
             return ""
     except Exception as e:
         st.error(f"Error reading file: {str(e)}")
-            return ""
+        return ""
 
+# Generate quiz questions
 def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
     if not model:
         st.error("Model not initialized. Please check API key and model availability.")
@@ -154,7 +165,7 @@ def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
 
     num_easy = int(total_questions * (easy_pct / 100))
     num_mid = int(total_questions * (mid_pct / 100))
-    num_hard = total_questions - num_easy - num_mid
+    num_hard = total_questions - num_easy - mid_pct
 
     if st.session_state.language == "ar":
         prompt = f"""قم بإنشاء {total_questions} أسئلة اختيار من متعدد بصيغة JSON من النص التالي:
@@ -204,41 +215,44 @@ Requirements:
             st.error(f"Failed to generate questions: {str(e)}")
         return []
 
-# Main app layout
+# Main App UI
 st.title(translations[st.session_state.language]["title"])
 st.caption(translations[st.session_state.language]["caption"])
 
 # Sidebar Settings
 with st.sidebar:
     st.markdown("### ⚙️ Quiz Settings")
-    total_questions = st.slider(translations[st.session_state.language]["total_questions"], 5, 20, 10)
-    easy_pct = st.slider("% Easy" if st.session_state.language == "en" else "% سهلة", 0, 100, 30)
-    mid_pct = st.slider("% Medium" if st.session_state.language == "en" else "% متوسطة", 0, 100, 50)
+    t = translations[st.session_state.language]
+    total_questions = st.slider(t["input_method_label"], 5, 20, 10)
+    easy_pct = st.slider("% Easy", 0, 100, 30)
+    mid_pct = st.slider("% Medium", 0, 100, 50)
     hard_pct = 100 - easy_pct - mid_pct
-    st.metric("Hard questions" if st.session_state.language == "en" else "أسئلة صعبة", f"{hard_pct}%")
-    st.markdown("### 🔒 Security Note" if st.session_state.language == "en" else "### 🔒 ملاحظة الأمان")
-    st.markdown("Your API key is securely stored" if st.session_state.language == "en" else "يتم تخزين مفتاح API الخاص بك بأمان")
+    st.metric("Hard questions", f"{hard_pct}%")
+    st.markdown("### 🔒 Security Note")
+    st.markdown("Your API key is securely stored")
 
-# Input method selection
+# Input Method Selection
+t = translations[st.session_state.language]
 input_method = st.radio(
-    translations[st.session_state.language]["input_method"],
-    [translations[st.session_state.language]["upload_file"], translations[st.session_state.language]["enter_text"]],
+    t["input_method_label"],
+    [t["upload_file_option"], t["enter_text_option"]],
     horizontal=True,
     key="input_method"
 )
 
 # File Upload Section
-if input_method == translations[st.session_state.language]["upload_file"]:
+if input_method == t["upload_file_option"]:
     uploaded_file = st.file_uploader(
-        translations[st.session_state.language]["upload_prompt"],
-        type=["pdf", "txt"], key="file_uploader"
+        t["upload_prompt"],
+        type=["pdf", "txt"],
+        key="file_uploader"
     )
     if uploaded_file:
         st.session_state.text_content = extract_text_from_file(uploaded_file)
         if st.session_state.text_content.strip():
-            st.success(translations[st.session_state.language]["file_uploaded_successfully"])
-            if st.button(translations[st.session_state.language]["generate_questions"], key="generate_from_file"):
-                with st.spinner(translations[st.session_state.language]["generating_questions"]):
+            st.success(t["file_uploaded_successfully"])
+            if st.button(t["generate_questions_button"], key="generate_from_file"):
+                with st.spinner(t["generating_questions"]):
                     st.session_state.questions = generate_questions(
                         st.session_state.text_content,
                         total_questions,
@@ -253,17 +267,17 @@ if input_method == translations[st.session_state.language]["upload_file"]:
                         st.session_state.quiz_complete = False
                         st.rerun()
         else:
-            st.warning(translations[st.session_state.language]["empty_file"])
+            st.warning(t["empty_file_warning"])
 else:
     st.session_state.text_content = st.text_area(
-        translations[st.session_state.language]["enter_text_here"],
+        t["enter_text_option"],
         height=200,
         value=st.session_state.text_content,
         key="text_input"
     )
     if st.session_state.text_content.strip():
-        if st.button(translations[st.session_state.language]["generate_questions"], key="generate_from_text"):
-            with st.spinner(translations[st.session_state.language]["generating_questions"]):
+        if st.button(t["generate_questions_button"], key="generate_from_text"):
+            with st.spinner(t["generating_questions"]):
                 st.session_state.questions = generate_questions(
                     st.session_state.text_content,
                     total_questions,
@@ -281,13 +295,10 @@ else:
 # Quiz Display Logic
 if st.session_state.questions and not st.session_state.quiz_complete:
     q = st.session_state.questions[st.session_state.current_question]
-    st.subheader(translations[st.session_state.language]["question_format"].format(
-        current=st.session_state.current_question + 1,
-        total=len(st.session_state.questions)
-    ))
+    st.subheader(t["question_format"].format(current=st.session_state.current_question + 1, total=len(st.session_state.questions)))
 
     difficulty_color = 'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'
-    st.markdown(f"**{translations[st.session_state.language]['difficulty']}:** :{difficulty_color}[{q['difficulty'].upper()}]")
+    st.markdown(f"**{t['difficulty']}:** :{difficulty_color}[{q['difficulty'].upper()}]")
 
     question_text = q['question']
     if st.session_state.language == "ar":
@@ -300,13 +311,13 @@ if st.session_state.questions and not st.session_state.quiz_complete:
         return f"{x}) {options_dict[x]}" if st.session_state.language == "en" else f"{options_dict[x]} ) {x}"
 
     selected_key = st.radio(
-        "Select your answer:" if st.session_state.language == "en" else "اختر إجابتك:",
+        t["select_answer"],
         options=list(options_dict.keys()),
         format_func=format_option,
         key=f"q_{st.session_state.current_question}"
     )
 
-    if st.button("Submit Answer" if st.session_state.language == "en" else "إرسال الإجابة", key=f"submit_{st.session_state.current_question}"):
+    if st.button(t["submit_answer"], key=f"submit_{st.session_state.current_question}"):
         is_correct = selected_key == q['correct']
         st.session_state.user_answers.append({
             "question": q['question'],
@@ -319,10 +330,10 @@ if st.session_state.questions and not st.session_state.quiz_complete:
         })
         if is_correct:
             st.session_state.score += 1
-            st.success("✅ Correct!" if st.session_state.language == "en" else "✅ صحيح!")
+            st.success(t["correct"])
         else:
-            st.error(f"❌ Incorrect (Correct answer: {q['correct']}) {options_dict[q['correct']]}" if st.session_state.language == "en" else f"❌ خطأ (الإجابة الصحيحة: {q['correct']} {options_dict[q['correct']]})")
-        st.markdown(f"**Explanation:** {q['explanation']}")
+            st.error(t["incorrect"].format(correct=q['correct']))
+        st.markdown(f"**{t['explanation']}** {q['explanation']}")
         if st.session_state.current_question < len(st.session_state.questions) - 1:
             st.session_state.current_question += 1
             st.rerun()
@@ -333,20 +344,20 @@ if st.session_state.questions and not st.session_state.quiz_complete:
 # Quiz Completion Screen
 if st.session_state.quiz_complete:
     st.balloons()
-    st.success(translations[st.session_state.language]["quiz_completed"])
+    st.success(t["quiz_completed"])
 
     correct = st.session_state.score
     total = len(st.session_state.questions)
     percentage = (correct / total) * 100
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(translations[st.session_state.language]["correct_answers"], f"{correct}/{total}")
+        st.metric(t["correct_answers"], f"{correct}/{total}")
     with col2:
-        st.metric(translations[st.session_state.language]["incorrect_answers"], f"{total - correct}/{total}")
+        st.metric(t["incorrect_answers"], f"{total - correct}/{total}")
     with col3:
-        st.metric(translations[st.session_state.language]["percentage"], f"{percentage:.1f}%")
+        st.metric(t["percentage"], f"{percentage:.1f}%")
 
-    st.subheader(translations[st.session_state.language]["performance_by_difficulty"])
+    st.subheader(t["performance_by_difficulty"])
     difficulty_stats = {"Easy": 0, "Medium": 0, "Hard": 0}
     for q, ans in zip(st.session_state.questions, st.session_state.user_answers):
         if ans['is_correct']:
@@ -358,16 +369,16 @@ if st.session_state.quiz_complete:
                 difficulty_stats["Hard"] += 1
     st.bar_chart(difficulty_stats)
 
-    st.subheader(translations[st.session_state.language]["detailed_review"])
+    st.subheader(t["detailed_review"])
     for i, ans in enumerate(st.session_state.user_answers, 1):
         with st.expander(f"Question {i}: {ans['question']}" if st.session_state.language == "en" else f"السؤال {i}: {ans['question']}", expanded=False):
             status = "✅ Correct" if ans['is_correct'] else "❌ Incorrect"
-            st.markdown(f"**Your Answer:** {status} {ans['selected_key']}) {ans['selected']}")
+            st.markdown(f"{t['your_answer']} {status} {ans['selected_key']}) {ans['selected']}")
             if not ans['is_correct']:
-                st.markdown(f"**Correct Answer:** {ans['correct_key']}) {ans['correct']}")
+                st.markdown(f"{t['correct_answer']} {ans['correct_key']}) {ans['correct']}")
             st.markdown(f"**Explanation:** {ans['explanation']}")
 
-    if st.button(translations[st.session_state.language]["start_new_quiz"]):
+    if st.button(t["start_new_quiz"]):
         st.session_state.questions = []
         st.session_state.current_question = 0
         st.session_state.score = 0
@@ -377,7 +388,7 @@ if st.session_state.quiz_complete:
 
 # Reset Button
 if st.session_state.questions and not st.session_state.quiz_complete:
-    if st.button(translations[st.session_state.language]["reset_quiz"]):
+    if st.button(t["reset_quiz"]):
         st.session_state.questions = []
         st.session_state.current_question = 0
         st.session_state.score = 0
@@ -386,7 +397,7 @@ if st.session_state.questions and not st.session_state.quiz_complete:
         st.rerun()
 
 st.markdown("---")
-st.caption(translations[st.session_state.language]["note"])
+st.caption(t["note"])
 
-# Close the language direction div
+# Close RTL div
 st.markdown('</div>', unsafe_allow_html=True)
