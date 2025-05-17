@@ -7,7 +7,6 @@ import os
 import time
 import arabic_reshaper
 from bidi.algorithm import get_display
-import uuid
 
 # Initialize session state
 if 'questions' not in st.session_state:
@@ -25,62 +24,13 @@ if 'text_content' not in st.session_state:
 if 'language' not in st.session_state:
     st.session_state.language = "English"  # Default language
 
-# Add custom CSS for Arabic RTL and font
-def add_custom_css():
-    st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;700&display=swap');
-    
-    /* RTL for Arabic */
-    .arabic {
-        direction: rtl;
-        text-align: right;
-        font-family: 'Noto Sans Arabic', Arial, sans-serif !important;
-        font-size: 16px;
-    }
-    
-    /* Apply RTL to specific Streamlit components */
-    .arabic .stRadio > div,
-    .arabic .stSlider > div,
-    .arabic .stButton > button,
-    .arabic .stTextArea > div,
-    .arabic .stFileUploader > div {
-        direction: rtl;
-        text-align: right;
-    }
-    
-    /* Ensure radio buttons align correctly */
-    .arabic .stRadio > div > label {
-        flex-direction: row-reverse;
-        justify-content: flex-end;
-    }
-    
-    /* Fix button alignment */
-    .arabic .stButton > button {
-        float: right;
-    }
-    
-    /* Ensure markdown and headers respect RTL */
-    .arabic h1, .arabic h2, .arabic h3, .arabic p, .arabic div {
-        font-family: 'Noto Sans Arabic', Arial, sans-serif !important;
-    }
-    
-    /* Progress bar and metrics */
-    .arabic .stMetric > div {
-        direction: rtl;
-        text-align: right;
-    }
-    
-    </style>
-    """, unsafe_allow_html=True)
-
 def configure_google_api():
     if "GOOGLE_API_KEY" in os.environ:
         genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
     elif "GOOGLE_API_KEY" in st.secrets:
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     else:
-        st.error(format_arabic_text("Google API key not configured"))
+        st.error("Google API key not configured")
         return False
     return True
 
@@ -88,13 +38,11 @@ if configure_google_api():
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
-        st.error(format_arabic_text(f"Failed to initialize model: {str(e)}"))
+        st.error(f"Failed to initialize model: {str(e)}")
         model = None
 
 def format_arabic_text(text):
     """Format Arabic text for proper display"""
-    if not isinstance(text, str):
-        text = str(text)
     if st.session_state.language == "Arabic":
         reshaped_text = arabic_reshaper.reshape(text)
         return get_display(reshaped_text)
@@ -129,7 +77,7 @@ def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
     num_mid = int(total_questions * (mid_pct/100))
     num_hard = total_questions - num_easy - num_mid
     
-    language_instruction = "in Arabic with properly formatted, reshaped, and right-to-left text" if st.session_state.language == "Arabic" else "in English"
+    language_instruction = "in Arabic" if st.session_state.language == "Arabic" else "in English"
     
     prompt = f"""Generate {total_questions} multiple choice questions {language_instruction} as a JSON array from this text:
 {text[:3000]}
@@ -148,15 +96,14 @@ Requirements:
 - {num_mid} medium questions (application)
 - {num_hard} hard questions (analysis)
 - Only return the JSON array, nothing else
-- All content must be in {st.session_state.language}
-- For Arabic, ensure text is properly reshaped and formatted for right-to-left display"""
+- All content must be in {st.session_state.language}"""
 
     try:
         response = model.generate_content(prompt)
         json_str = response.text.strip().replace('```json\n', '').replace('\n```', '')
         questions = json.loads(json_str)
         
-        # Format Arabic text for questions
+        # Format Arabic text if needed
         if st.session_state.language == "Arabic":
             for q in questions:
                 q['question'] = format_arabic_text(q['question'])
@@ -177,15 +124,8 @@ Requirements:
 # Main app layout
 st.set_page_config(page_title=format_arabic_text("منشئ الاختبارات بالذكاء الاصطناعي"), layout="wide")
 
-# Add custom CSS
-add_custom_css()
-
-# Apply Arabic class if language is Arabic
-if st.session_state.language == "Arabic":
-    st.markdown('<div class="arabic">', unsafe_allow_html=True)
-
 # Language selection at the top
-language = st.radio(format_arabic_text("اللغة / Language"), ["English", "Arabic"], horizontal=True)
+language = st.radio("اللغة / Language", ["English", "Arabic"], horizontal=True)
 st.session_state.language = language
 
 if language == "Arabic":
@@ -201,7 +141,7 @@ with st.sidebar:
         total_questions = st.slider(format_arabic_text("عدد الأسئلة"), 5, 20, 10)
         easy_pct = st.slider(format_arabic_text("% سهلة"), 0, 100, 30)
         mid_pct = st.slider(format_arabic_text("% متوسطة"), 0, 100, 50)
-        hard_pct = 100 -easy_pct - mid_pct
+        hard_pct = 100 - easy_pct - mid_pct
         st.metric(format_arabic_text("أسئلة صعبة"), f"{hard_pct}%")
         st.markdown(format_arabic_text("### 🔒 ملاحظة أمنية\nمفتاح API الخاص بك مخزن بشكل آمن"))
     else:
@@ -215,36 +155,25 @@ with st.sidebar:
 
 # Input method selection
 if language == "Arabic":
-    input_method = st.radio(
-        format_arabic_text("اختر طريقة الإدخال:"),
-        (
-            format_arabic_text("📄 تحميل ملف PDF أو نصي"),
-            format_arabic_text("✍️ إدخال نص")
-        ),
-        horizontal=True,
-        key="input_method"
-    )
+    input_method = st.radio(format_arabic_text("اختر طريقة الإدخال:"), 
+                          (format_arabic_text("📄 تحميل ملف PDF أو نصي"), format_arabic_text("✍️ إدخال نص")), 
+                          horizontal=True,
+                          key="input_method")
 else:
-    input_method = st.radio(
-        "Choose input method:",
-        ("📄 Upload PDF or Text File", "✍️ Enter Text"),
-        horizontal=True,
-        key="input_method"
-    )
+    input_method = st.radio("Choose input method:", 
+                          ("📄 Upload PDF or Text File", "✍️ Enter Text"), 
+                          horizontal=True,
+                          key="input_method")
 
-if input_method == format_arabic_text("📄 تحميل ملف PDF أو نصي") or input_method == "📄 Upload PDF or Text File":
+if input_method == "📄 Upload PDF or Text File" or input_method == format_arabic_text("📄 تحميل ملف PDF أو نصي"):
     if language == "Arabic":
-        uploaded_file = st.file_uploader(
-            format_arabic_text("تحميل ملف"),
-            type=["pdf", "txt"],
-            key="file_uploader"
-        )
+        uploaded_file = st.file_uploader(format_arabic_text("تحميل ملف"), 
+                                      type=["pdf", "txt"], 
+                                      key="file_uploader")
     else:
-        uploaded_file = st.file_uploader(
-            "Upload a file",
-            type=["pdf", "txt"],
-            key="file_uploader"
-        )
+        uploaded_file = st.file_uploader("Upload a file", 
+                                      type=["pdf", "txt"], 
+                                      key="file_uploader")
     
     if uploaded_file:
         st.session_state.text_content = extract_text_from_file(uploaded_file)
@@ -254,10 +183,10 @@ if input_method == format_arabic_text("📄 تحميل ملف PDF أو نصي") 
                 if st.button(format_arabic_text("✨ إنشاء الأسئلة"), key="generate_from_file"):
                     with st.spinner(format_arabic_text("جارٍ إنشاء الأسئلة...")):
                         st.session_state.questions = generate_questions(
-                            st.session_state.text_content,
-                            total_questions,
-                            easy_pct,
-                            mid_pct,
+                            st.session_state.text_content, 
+                            total_questions, 
+                            easy_pct, 
+                            mid_pct, 
                             hard_pct
                         )
                         if st.session_state.questions:
@@ -271,10 +200,10 @@ if input_method == format_arabic_text("📄 تحميل ملف PDF أو نصي") 
                 if st.button("✨ Generate Questions", key="generate_from_file"):
                     with st.spinner("Generating questions..."):
                         st.session_state.questions = generate_questions(
-                            st.session_state.text_content,
-                            total_questions,
-                            easy_pct,
-                            mid_pct,
+                            st.session_state.text_content, 
+                            total_questions, 
+                            easy_pct, 
+                            mid_pct, 
                             hard_pct
                         )
                         if st.session_state.questions:
@@ -291,15 +220,15 @@ if input_method == format_arabic_text("📄 تحميل ملف PDF أو نصي") 
 else:
     if language == "Arabic":
         st.session_state.text_content = st.text_area(
-            format_arabic_text("أدخل النص هنا:"),
-            height=200,
+            format_arabic_text("أدخل النص هنا:"), 
+            height=200, 
             value=st.session_state.text_content,
             key="text_input"
         )
     else:
         st.session_state.text_content = st.text_area(
-            "Enter your text here:",
-            height=200,
+            "Enter your text here:", 
+            height=200, 
             value=st.session_state.text_content,
             key="text_input"
         )
@@ -309,10 +238,10 @@ else:
             if st.button(format_arabic_text("✨ إنشاء الأسئلة"), key="generate_from_text"):
                 with st.spinner(format_arabic_text("جارٍ إنشاء الأسئلة...")):
                     st.session_state.questions = generate_questions(
-                        st.session_state.text_content,
-                        total_questions,
-                        easy_pct,
-                        mid_pct,
+                        st.session_state.text_content, 
+                        total_questions, 
+                        easy_pct, 
+                        mid_pct, 
                         hard_pct
                     )
                     if st.session_state.questions:
@@ -325,10 +254,10 @@ else:
             if st.button("✨ Generate Questions", key="generate_from_text"):
                 with st.spinner("Generating questions..."):
                     st.session_state.questions = generate_questions(
-                        st.session_state.text_content,
-                        total_questions,
-                        easy_pct,
-                        mid_pct,
+                        st.session_state.text_content, 
+                        total_questions, 
+                        easy_pct, 
+                        mid_pct, 
                         hard_pct
                     )
                     if st.session_state.questions:
@@ -344,39 +273,32 @@ if st.session_state.questions and not st.session_state.quiz_complete:
     
     if language == "Arabic":
         st.subheader(format_arabic_text(f"السؤال {st.session_state.current_question + 1} من {len(st.session_state.questions)}"))
-        difficulty_label = format_arabic_text(
-            "سهلة" if q['difficulty'] == 'easy' else
-            "متوسطة" if q['difficulty'] == 'mid' else "صعبة"
-        )
-        st.markdown(format_arabic_text(f"**الصعوبة:** :{'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'}[{difficulty_label}]"))
-        st.markdown(f"### {format_arabic_text(q['question'])}")
+        st.markdown(format_arabic_text(f"**الصعوبة:** :{'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'}[{'سهلة' if q['difficulty'] == 'easy' else 'متوسطة' if q['difficulty'] == 'mid' else 'صعبة'}]"))
+        st.markdown(f"### {q['question']}")
     else:
         st.subheader(f"Question {st.session_state.current_question + 1} of {len(st.session_state.questions)}")
         st.markdown(f"**Difficulty:** :{'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'}[{q['difficulty'].upper()}]")
         st.markdown(f"### {q['question']}")
     
     # Create a mapping of option letters to their values
-    options_dict = {chr(65+i): format_arabic_text(opt) for i, opt in enumerate(q['options'])}
+    options_dict = {chr(65+i): opt for i, opt in enumerate(q['options'])}
     
     selected_key = st.radio(
         format_arabic_text("اختر الإجابة:") if language == "Arabic" else "Select your answer:",
         options=list(options_dict.keys()),
-        format_func=lambda x: format_arabic_text(f"{x}) {options_dict[x]}"),
-        key=f"q_{st.session_state.current_question}"
-    )
+        format_func=lambda x: f"{x}) {options_dict[x]}",
+        key=f"q_{st.session_state.current_question}")
     
-    if st.button(
-        format_arabic_text("إرسال الإجابة") if language == "Arabic" else "Submit Answer",
-        key=f"submit_{st.session_state.current_question}"
-    ):
+    if st.button(format_arabic_text("إرسال الإجابة") if language == "Arabic" else "Submit Answer", 
+                key=f"submit_{st.session_state.current_question}"):
         is_correct = selected_key == q['correct']
         st.session_state.user_answers.append({
-            "question": format_arabic_text(q['question']),
+            "question": q['question'],
             "selected": options_dict[selected_key],
             "selected_key": selected_key,
             "correct": options_dict[q['correct']],
             "correct_key": q['correct'],
-            "explanation": format_arabic_text(q['explanation']),
+            "explanation": q['explanation'],
             "is_correct": is_correct
         })
         
@@ -389,7 +311,7 @@ if st.session_state.questions and not st.session_state.quiz_complete:
             else:
                 st.error(f"❌ Incorrect (Correct answer: {q['correct']}) {options_dict[q['correct']]}")
         
-        st.markdown(f"**{format_arabic_text('التفسير') if language == 'Arabic' else 'Explanation'}:** {format_arabic_text(q['explanation'])}")
+        st.markdown(f"**{format_arabic_text('التفسير') if language == 'Arabic' else 'Explanation'}:** {q['explanation']}")
         
         # Move to next question or finish quiz
         if st.session_state.current_question < len(st.session_state.questions) - 1:
@@ -485,7 +407,3 @@ if language == "Arabic":
     st.caption(format_arabic_text("ملاحظة: يستخدم Google Gemini API لإنشاء الأسئلة"))
 else:
     st.caption("Note: Uses Google's Gemini API for question generation")
-
-# Close Arabic div
-if st.session_state.language == "Arabic":
-    st.markdown('</div>', unsafe_allow_html=True)
