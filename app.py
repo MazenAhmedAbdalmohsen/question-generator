@@ -6,6 +6,10 @@ import google.generativeai as genai
 import os
 import time
 
+# --- MUST BE FIRST STREAMLIT COMMAND ---
+st.set_page_config(page_title="AI Quiz Generator", layout="wide")
+# ---------------------------------------
+
 # Initialize session state
 if 'questions' not in st.session_state:
     st.session_state.questions = []
@@ -21,6 +25,40 @@ if 'text_content' not in st.session_state:
     st.session_state.text_content = ""
 if 'language' not in st.session_state:
     st.session_state.language = "en"  # Default to English
+
+# Language Direction CSS
+RTL_CSS = """
+<style>
+.rtl-text {
+    direction: rtl;
+    text-align: right;
+}
+.ltr-text {
+    direction: ltr;
+    text-align: left;
+}
+</style>
+"""
+
+# Language Selector
+with st.sidebar:
+    st.markdown("### 🌍 Language")
+    lang = st.selectbox(
+        "Choose language",
+        ["English", "العربية"],
+        index=0 if st.session_state.language == "en" else 1,
+        key="lang_selector"
+    )
+    st.session_state.language = "ar" if lang == "العربية" else "en"
+    st.markdown(RTL_CSS, unsafe_allow_html=True)
+
+# Apply language direction
+lang_dir = "rtl" if st.session_state.language == "ar" else "ltr"
+st.markdown(f'<div class="{lang_dir}-text">', unsafe_allow_html=True)
+
+# Main app layout
+st.title("🧠 AI Quiz Generator")
+st.caption("Powered by Google Gemini API")
 
 def configure_google_api():
     if "GOOGLE_API_KEY" in os.environ:
@@ -97,41 +135,6 @@ Requirements:
         else:
             st.error(f"Failed to generate questions: {str(e)}")
         return []
-
-# Language Direction CSS
-RTL_CSS = """
-<style>
-.rtl-text {
-    direction: rtl;
-    text-align: right;
-}
-.ltr-text {
-    direction: ltr;
-    text-align: left;
-}
-</style>
-"""
-
-# Language Selector
-with st.sidebar:
-    st.markdown("### 🌍 Language")
-    lang = st.selectbox(
-        "Choose language" if st.session_state.language == "en" else "اختر اللغة",
-        ["English", "العربية"],
-        index=0 if st.session_state.language == "en" else 1,
-        key="lang_selector"
-    )
-    st.session_state.language = "ar" if lang == "العربية" else "en"
-    st.markdown(RTL_CSS, unsafe_allow_html=True)
-
-# Apply language direction
-lang_dir = "rtl" if st.session_state.language == "ar" else "ltr"
-st.markdown(f'<div class="{lang_dir}-text">', unsafe_allow_html=True)
-
-# Main app layout
-st.set_page_config(page_title="AI Quiz Generator", layout="wide")
-st.title("🧠 AI Quiz Generator")
-st.caption("Powered by Google Gemini API")
 
 # Sidebar Settings
 with st.sidebar:
