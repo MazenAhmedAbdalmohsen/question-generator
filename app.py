@@ -55,9 +55,61 @@ with st.sidebar:
 lang_dir = "rtl" if st.session_state.language == "ar" else "ltr"
 st.markdown(f'<div class="{lang_dir}-text">', unsafe_allow_html=True)
 
-# Main app layout
-st.title("🧠 AI Quiz Generator")
-st.caption("Powered by Google Gemini API")
+# Translations
+translations = {
+    "en": {
+        "title": "🧠 AI Quiz Generator",
+        "caption": "Powered by Google Gemini API",
+        "input_method": "Choose input method:",
+        "upload_file": "📄 Upload PDF or Text File",
+        "enter_text": "✍️ Enter Text",
+        "upload_prompt": "Upload a file",
+        "empty_file": "The uploaded file appears to be empty",
+        "generate_questions": "✨ Generate Questions",
+        "generating_questions": "Generating questions...",
+        "file_uploaded_successfully": "File uploaded successfully!",
+        "question_format": "Question {current} of {total}",
+        "difficulty": "Difficulty:",
+        "correct": "✅ Correct!",
+        "incorrect": "❌ Incorrect (Correct answer: {correct})",
+        "explanation": "Explanation:",
+        "quiz_completed": "🎉 Quiz Completed!",
+        "correct_answers": "Correct Answers",
+        "incorrect_answers": "Incorrect Answers",
+        "percentage": "Percentage",
+        "performance_by_difficulty": "📊 Performance by Difficulty",
+        "detailed_review": "🔍 Detailed Review",
+        "start_new_quiz": "🔄 Start New Quiz",
+        "reset_quiz": "🔁 Reset Quiz",
+        "note": "Note: Uses Google's Gemini API for question generation",
+    },
+    "ar": {
+        "title": "🧠 جيلerator الأسئلة الذكاء الاصطناعي",
+        "caption": "مدعوم بواسطة واجهة برمجة جوجل Gemini",
+        "input_method": "اختر طريقة الإدخال:",
+        "upload_file": "📄 رفع ملف PDF أو نص",
+        "enter_text": "✍️ أدخل النص",
+        "upload_prompt": "ارفع ملفًا",
+        "empty_file": "يبدو أن الملف الذي تم رفعه فارغ",
+        "generate_questions": "✨ إنشاء أسئلة",
+        "generating_questions": "جارٍ إنشاء الأسئلة...",
+        "file_uploaded_successfully": "تم رفع الملف بنجاح!",
+        "question_format": "السؤال {current} من {total}",
+        "difficulty": "الصعوبة:",
+        "correct": "✅ صحيح!",
+        "incorrect": "❌ خطأ (الإجابة الصحيحة: {correct})",
+        "explanation": "التفسير:",
+        "quiz_completed": "🎉 اكتمل الاختبار!",
+        "correct_answers": "الإجابات الصحيحة",
+        "incorrect_answers": "الإجابات الخاطئة",
+        "percentage": "النسبة المئوية",
+        "performance_by_difficulty": "📊 الأداء حسب الصعوبة",
+        "detailed_review": "🔍 مراجعة تفصيلية",
+        "start_new_quiz": "🔄 بدء اختبار جديد",
+        "reset_quiz": "🔁 إعادة تعيين الاختبار",
+        "note": "ملاحظة: يستخدم هذا التطبيق واجهة برمجة جوجل Gemini لإنشاء الأسئلة",
+    },
+}
 
 def configure_google_api():
     if "GOOGLE_API_KEY" in os.environ:
@@ -90,7 +142,7 @@ def extract_text_from_file(uploaded_file):
             return ""
     except Exception as e:
         st.error(f"Error reading file: {str(e)}")
-        return ""
+            return ""
 
 def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
     if not model:
@@ -152,10 +204,14 @@ Requirements:
             st.error(f"Failed to generate questions: {str(e)}")
         return []
 
+# Main app layout
+st.title(translations[st.session_state.language]["title"])
+st.caption(translations[st.session_state.language]["caption"])
+
 # Sidebar Settings
 with st.sidebar:
     st.markdown("### ⚙️ Quiz Settings")
-    total_questions = st.slider("Total questions" if st.session_state.language == "en" else "عدد الأسئلة", 5, 20, 10)
+    total_questions = st.slider(translations[st.session_state.language]["total_questions"], 5, 20, 10)
     easy_pct = st.slider("% Easy" if st.session_state.language == "en" else "% سهلة", 0, 100, 30)
     mid_pct = st.slider("% Medium" if st.session_state.language == "en" else "% متوسطة", 0, 100, 50)
     hard_pct = 100 - easy_pct - mid_pct
@@ -165,25 +221,24 @@ with st.sidebar:
 
 # Input method selection
 input_method = st.radio(
-    "Choose input method:" if st.session_state.language == "en" else "اختر طريقة الإدخال:",
-    ("📄 Upload PDF or Text File" if st.session_state.language == "en" else "📄 رفع ملف PDF أو نص",
-     "✍️ Enter Text" if st.session_state.language == "en" else "✍️ أدخل النص"),
+    translations[st.session_state.language]["input_method"],
+    [translations[st.session_state.language]["upload_file"], translations[st.session_state.language]["enter_text"]],
     horizontal=True,
     key="input_method"
 )
 
 # File Upload Section
-if input_method == "📄 Upload PDF or Text File":
+if input_method == translations[st.session_state.language]["upload_file"]:
     uploaded_file = st.file_uploader(
-        "Upload a file" if st.session_state.language == "en" else "ارفع ملفًا",
+        translations[st.session_state.language]["upload_prompt"],
         type=["pdf", "txt"], key="file_uploader"
     )
     if uploaded_file:
         st.session_state.text_content = extract_text_from_file(uploaded_file)
         if st.session_state.text_content.strip():
-            st.success("File uploaded successfully!" if st.session_state.language == "en" else "تم رفع الملف بنجاح!")
-            if st.button("✨ Generate Questions" if st.session_state.language == "en" else "✨ إنشاء أسئلة", key="generate_from_file"):
-                with st.spinner("Generating questions..." if st.session_state.language == "en" else "جارٍ إنشاء الأسئلة..."):
+            st.success(translations[st.session_state.language]["file_uploaded_successfully"])
+            if st.button(translations[st.session_state.language]["generate_questions"], key="generate_from_file"):
+                with st.spinner(translations[st.session_state.language]["generating_questions"]):
                     st.session_state.questions = generate_questions(
                         st.session_state.text_content,
                         total_questions,
@@ -198,17 +253,17 @@ if input_method == "📄 Upload PDF or Text File":
                         st.session_state.quiz_complete = False
                         st.rerun()
         else:
-            st.warning("The uploaded file appears to be empty" if st.session_state.language == "en" else "يبدو أن الملف الذي تم رفعه فارغ")
+            st.warning(translations[st.session_state.language]["empty_file"])
 else:
     st.session_state.text_content = st.text_area(
-        "Enter your text here:" if st.session_state.language == "en" else "أدخل النص هنا:",
+        translations[st.session_state.language]["enter_text_here"],
         height=200,
         value=st.session_state.text_content,
         key="text_input"
     )
     if st.session_state.text_content.strip():
-        if st.button("✨ Generate Questions" if st.session_state.language == "en" else "✨ إنشاء أسئلة", key="generate_from_text"):
-            with st.spinner("Generating questions..." if st.session_state.language == "en" else "جارٍ إنشاء الأسئلة..."):
+        if st.button(translations[st.session_state.language]["generate_questions"], key="generate_from_text"):
+            with st.spinner(translations[st.session_state.language]["generating_questions"]):
                 st.session_state.questions = generate_questions(
                     st.session_state.text_content,
                     total_questions,
@@ -226,12 +281,13 @@ else:
 # Quiz Display Logic
 if st.session_state.questions and not st.session_state.quiz_complete:
     q = st.session_state.questions[st.session_state.current_question]
-    st.subheader(f"Question {st.session_state.current_question + 1} of {len(st.session_state.questions)}"
-                 if st.session_state.language == "en" else
-                 f"السؤال {st.session_state.current_question + 1} من {len(st.session_state.questions)}")
+    st.subheader(translations[st.session_state.language]["question_format"].format(
+        current=st.session_state.current_question + 1,
+        total=len(st.session_state.questions)
+    ))
 
     difficulty_color = 'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'
-    st.markdown(f"**Difficulty:** :{difficulty_color}[{q['difficulty'].upper()}]")
+    st.markdown(f"**{translations[st.session_state.language]['difficulty']}:** :{difficulty_color}[{q['difficulty'].upper()}]")
 
     question_text = q['question']
     if st.session_state.language == "ar":
@@ -277,20 +333,20 @@ if st.session_state.questions and not st.session_state.quiz_complete:
 # Quiz Completion Screen
 if st.session_state.quiz_complete:
     st.balloons()
-    st.success("🎉 Quiz Completed!" if st.session_state.language == "en" else "🎉 اكتمل الاختبار!")
+    st.success(translations[st.session_state.language]["quiz_completed"])
 
     correct = st.session_state.score
     total = len(st.session_state.questions)
     percentage = (correct / total) * 100
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Correct Answers" if st.session_state.language == "en" else "الإجابات الصحيحة", f"{correct}/{total}")
+        st.metric(translations[st.session_state.language]["correct_answers"], f"{correct}/{total}")
     with col2:
-        st.metric("Incorrect Answers" if st.session_state.language == "en" else "الإجابات الخاطئة", f"{total - correct}/{total}")
+        st.metric(translations[st.session_state.language]["incorrect_answers"], f"{total - correct}/{total}")
     with col3:
-        st.metric("Percentage" if st.session_state.language == "en" else "النسبة المئوية", f"{percentage:.1f}%")
+        st.metric(translations[st.session_state.language]["percentage"], f"{percentage:.1f}%")
 
-    st.subheader("📊 Performance by Difficulty" if st.session_state.language == "en" else "📊 الأداء حسب الصعوبة")
+    st.subheader(translations[st.session_state.language]["performance_by_difficulty"])
     difficulty_stats = {"Easy": 0, "Medium": 0, "Hard": 0}
     for q, ans in zip(st.session_state.questions, st.session_state.user_answers):
         if ans['is_correct']:
@@ -302,7 +358,7 @@ if st.session_state.quiz_complete:
                 difficulty_stats["Hard"] += 1
     st.bar_chart(difficulty_stats)
 
-    st.subheader("🔍 Detailed Review" if st.session_state.language == "en" else "🔍 مراجعة تفصيلية")
+    st.subheader(translations[st.session_state.language]["detailed_review"])
     for i, ans in enumerate(st.session_state.user_answers, 1):
         with st.expander(f"Question {i}: {ans['question']}" if st.session_state.language == "en" else f"السؤال {i}: {ans['question']}", expanded=False):
             status = "✅ Correct" if ans['is_correct'] else "❌ Incorrect"
@@ -311,7 +367,7 @@ if st.session_state.quiz_complete:
                 st.markdown(f"**Correct Answer:** {ans['correct_key']}) {ans['correct']}")
             st.markdown(f"**Explanation:** {ans['explanation']}")
 
-    if st.button("🔄 Start New Quiz" if st.session_state.language == "en" else "🔄 بدء اختبار جديد"):
+    if st.button(translations[st.session_state.language]["start_new_quiz"]):
         st.session_state.questions = []
         st.session_state.current_question = 0
         st.session_state.score = 0
@@ -321,7 +377,7 @@ if st.session_state.quiz_complete:
 
 # Reset Button
 if st.session_state.questions and not st.session_state.quiz_complete:
-    if st.button("🔁 Reset Quiz" if st.session_state.language == "en" else "🔁 إعادة تعيين الاختبار"):
+    if st.button(translations[st.session_state.language]["reset_quiz"]):
         st.session_state.questions = []
         st.session_state.current_question = 0
         st.session_state.score = 0
@@ -330,7 +386,7 @@ if st.session_state.questions and not st.session_state.quiz_complete:
         st.rerun()
 
 st.markdown("---")
-st.caption("Note: Uses Google's Gemini API for question generation" if st.session_state.language == "en" else "ملاحظة: يستخدم هذا التطبيق واجهة برمجة جوجل Gemini لإنشاء الأسئلة")
+st.caption(translations[st.session_state.language]["note"])
 
 # Close the language direction div
 st.markdown('</div>', unsafe_allow_html=True)
