@@ -165,7 +165,7 @@ def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
 
     num_easy = int(total_questions * (easy_pct / 100))
     num_mid = int(total_questions * (mid_pct / 100))
-    num_hard = total_questions - num_easy - num_mid
+    num_hard = total_questions - num_easy - mid_pct
 
     if st.session_state.language == "ar":
         prompt = f"""قم بإنشاء {total_questions} أسئلة اختيار من متعدد بصيغة JSON من النص التالي:
@@ -201,12 +201,32 @@ Requirements:
 - Only return the JSON array, nothing else"""
 
     try:
-        response = model.generate_content(prompt)
-        json_str = response.text.strip().replace('```json\n', '').replace('\n```', '')
-        return json.loads(json_str)
-    except json.JSONDecodeError:
-        st.error("Failed to parse questions. Please try again with different content.")
-        return []
+        with st.spinner(translations[st.session_state.language]["generating_questions"]):
+            progress_bar = st.progress(0)
+            chunk_size = max(1, total_questions // 5)  # Break into 5 steps
+            generated_questions = []
+
+            # Split into chunks if needed
+            parts = [prompt[i:i + 2900] for i in range(0, len(prompt), 2900)]
+
+            for i, part in enumerate(parts):
+                response = model.generate_content(part)
+                json_str = response.text.strip().replace('```json\n', '').replace('\n```', '')
+                try:
+                    part_questions = json.loads(json_str)
+                    generated_questions.extend(part_questions)
+                except json.JSONDecodeError:
+                    st.warning("Some responses had issues but continuing...")
+
+                # Update progress bar
+                progress_bar.progress(min((i + 1) / len(parts), 1.0))
+
+            # Limit to required number of questions
+            st.session_state.questions = generated_questions[:total_questions]
+            if not st.session_state.questions:
+                st.warning("No valid questions were generated. Try again with different input.")
+            return st.session_state.questions
+
     except Exception as e:
         if "429" in str(e):
             st.error("Quota exceeded. Please wait and try again.")
@@ -217,6 +237,7 @@ Requirements:
 
 # Main App UI
 t = translations[st.session_state.language]
+
 st.title(t["title"])
 st.caption(t["caption"])
 
@@ -251,32 +272,6 @@ if input_method == t["upload_file_option"]:
         if st.session_state.text_content.strip():
             st.success(t["file_uploaded_successfully"])
             if st.button(t["generate_questions_button"], key="generate_from_file"):
-                with st.spinner(t["generating_questions"]):
-                    st.session_state.questions = generate_questions(
-                        st.session_state.text_content,
-                        total_questions,
-                        easy_pct,
-                        mid_pct,
-                        hard_pct
-                    )
-                    if st.session_state.questions:
-                        st.session_state.user_answers = []
-                        st.session_state.score = 0
-                        st.session_state.current_question = 0
-                        st.session_state.quiz_complete = False
-                        st.rerun()
-        else:
-            st.warning(t["empty_file_warning"])
-else:
-    st.session_state.text_content = st.text_area(
-        t["enter_text_option"],
-        height=200,
-        value=st.session_state.text_content,
-        key="text_input"
-    )
-    if st.session_state.text_content.strip():
-        if st.button(t["generate_questions_button"], key="generate_from_text"):
-            with st.spinner(t["generating_questions"]):
                 st.session_state.questions = generate_questions(
                     st.session_state.text_content,
                     total_questions,
@@ -290,14 +285,35 @@ else:
                     st.session_state.current_question = 0
                     st.session_state.quiz_complete = False
                     st.rerun()
+        else:
+            st.warning(t["empty_file_warning"])
+else:
+    st.session_state.text_content = st.text_area(
+        t["enter_text_option"],
+        height=200,
+        value=st.session_state.text_content,
+        key="text_input"
+    )
+    if st.session_state.text_content.strip():
+        if st.button(t["generate_questions_button"], key="generate_from_text"):
+            st.session_state.questions = generate_questions(
+                st.session_state.text_content,
+                total_questions,
+                easy_pct,
+                mid_pct,
+                hard_pct
+            )
+            if st.session_state.questions:
+                st.session_state.user_answers = []
+                st.session_state.score = 0
+                st.session_state.current_question = 0
+                st.session_state.quiz_complete = False
+                st.rerun()
 
 # Quiz Display Logic
 if st.session_state.questions and not st.session_state.quiz_complete:
     q = st.session_state.questions[st.session_state.current_question]
-    st.subheader(t["question_format"].format(
-        current=st.session_state.current_question + 1,
-        total=len(st.session_state.questions)
-    ))
+    st.subheader(t["question_format"].format(current=st.session_state.current_question + 1, total=len(st.session_state.questions)))
 
     difficulty_color = 'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'
     st.markdown(f"**{t['difficulty']}:** :{difficulty_color}[{q['difficulty'].upper()}]")
