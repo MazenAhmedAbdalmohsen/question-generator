@@ -93,7 +93,9 @@ translations = {
         "api_wait": "Please wait {seconds} seconds before generating more questions",
         "processing_file": "Processing file...",
         "api_error": "API Error: Please check your API key and try again",
-        "loading_model": "Loading AI model..."
+        "loading_model": "Loading AI model...",
+        "invalid_question": "Skipped invalid question format",
+        "question_error": "Error displaying question: {error}"
     },
     "ar": {
         "title": "🧠 منشئ الأسئلة بالذكاء الاصطناعي",
@@ -127,7 +129,9 @@ translations = {
         "api_wait": "الرجاء الانتظار {seconds} ثانية قبل إنشاء المزيد من الأسئلة",
         "processing_file": "جارٍ معالجة الملف...",
         "api_error": "خطأ في الواجهة البرمجية: يرجى التحقق من مفتاح API والمحاولة مرة أخرى",
-        "loading_model": "جارٍ تحميل نموذج الذكاء الاصطناعي..."
+        "loading_model": "جارٍ تحميل نموذج الذكاء الاصطناعي...",
+        "invalid_question": "تم تخطي سؤال غير صحيح",
+        "question_error": "خطأ في عرض السؤال: {error}"
     }
 }
 
@@ -152,6 +156,32 @@ def configure_google_api():
             return None
 
 model = configure_google_api()
+
+def validate_question(question):
+    """Validate the structure of a question and fix common issues"""
+    if not isinstance(question, dict):
+        return None
+        
+    required_keys = ['question', 'options', 'correct', 'difficulty', 'explanation']
+    if not all(key in question for key in required_keys):
+        return None
+    
+    # Ensure we have at least 2 options
+    if not isinstance(question['options'], list) or len(question['options']) < 2:
+        return None
+    
+    # Ensure correct answer is one of the options
+    if question['correct'] not in ['A', 'B', 'C', 'D']:
+        # Try to find the correct answer in options
+        for i, option in enumerate(question['options']):
+            if option == question['correct']:
+                question['correct'] = chr(65 + i)  # Convert to A, B, C, D
+                break
+        else:
+            # If we can't match, default to first option
+            question['correct'] = 'A'
+    
+    return question
 
 # Extract text from file with progress
 def extract_text_from_file(uploaded_file):
@@ -209,7 +239,7 @@ def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
 كل سؤال يجب أن يكون بهذا الشكل:
 {{
     "question": "...",
-    "options": ["A", "B", "C", "D"],
+    "options": ["خيار 1", "خيار 2", "خيار 3", "خيار 4"],
     "correct": "A",
     "difficulty": "easy|mid|hard",
     "explanation": "..."
@@ -218,6 +248,7 @@ def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
 - {num_easy} أسئلة سهلة (استرجاع بسيط)
 - {num_mid} أسئلة متوسطة (تطبيق)
 - {num_hard} أسئلة صعبة (تحليل)
+- تأكد أن الإجابة الصحيحة هي 'A' أو 'B' أو 'C' أو 'D'
 - لا تُرجع سوى المصفوفة JSON، ولا شيء آخر"""
     else:
         prompt = f"""Generate {total_questions} multiple choice questions as a JSON array from this text:
@@ -225,7 +256,7 @@ def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
 Format each question like this:
 {{
     "question": "...",
-    "options": ["A", "B", "C", "D"],
+    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
     "correct": "A",
     "difficulty": "easy|mid|hard",
     "explanation": "..."
@@ -234,13 +265,26 @@ Requirements:
 - {num_easy} easy questions (basic recall)
 - {num_mid} medium questions (application)
 - {num_hard} hard questions (analysis)
+- Ensure correct answer is ONLY 'A', 'B', 'C', or 'D'
 - Only return the JSON array, nothing else"""
 
     try:
         st.session_state.last_api_call = time.time()
         response = model.generate_content(prompt)
         json_str = response.text.strip().replace('```json\n', '').replace('\n```', '')
-        return json.loads(json_str)
+        questions = json.loads(json_str)
+        
+        # Validate all questions
+        validated_questions = []
+        for q in questions:
+            validated = validate_question(q)
+            if validated:
+                validated_questions.append(validated)
+            else:
+                st.warning(t["invalid_question"])
+                
+        return validated_questions[:total_questions]  # Ensure we don't exceed requested number
+        
     except json.JSONDecodeError:
         st.error("Failed to parse questions. Please try again with different content.")
         return []
@@ -331,55 +375,65 @@ else:
 
 # Quiz Display Logic
 if st.session_state.questions and not st.session_state.quiz_complete:
-    q = st.session_state.questions[st.session_state.current_question]
-    st.subheader(t["question_format"].format(
-        current=st.session_state.current_question + 1,
-        total=len(st.session_state.questions)
-    ))
+    try:
+        q = st.session_state.questions[st.session_state.current_question]
+        
+        # Ensure options_dict is properly formatted
+        options_dict = {chr(65 + i): opt for i, opt in enumerate(q['options'])}
+        
+        st.subheader(t["question_format"].format(
+            current=st.session_state.current_question + 1,
+            total=len(st.session_state.questions)
+        )
 
-    difficulty_color = 'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'
-    st.markdown(f"**{t['difficulty']}:** :{difficulty_color}[{q['difficulty'].upper()}]")
+        difficulty_color = 'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'
+        st.markdown(f"**{t['difficulty']}:** :{difficulty_color}[{q['difficulty'].upper()}]")
 
-    question_text = q['question']
-    if st.session_state.language == "ar":
-        question_text = f'<div class="rtl-text">{q["question"]}</div>'
-    st.markdown(f"### {question_text}", unsafe_allow_html=True)
+        question_text = q['question']
+        if st.session_state.language == "ar":
+            question_text = f'<div class="rtl-text">{q["question"]}</div>'
+        st.markdown(f"### {question_text}", unsafe_allow_html=True)
 
-    options_dict = {chr(65 + i): opt for i, opt in enumerate(q['options'])}
+        def format_option(x):
+            return f"{x}) {options_dict[x]}" if st.session_state.language == "en" else f"{options_dict[x]} ) {x}"
 
-    def format_option(x):
-        return f"{x}) {options_dict[x]}" if st.session_state.language == "en" else f"{options_dict[x]} ) {x}"
+        selected_key = st.radio(
+            t["select_answer"],
+            options=list(options_dict.keys()),
+            format_func=format_option,
+            key=f"q_{st.session_state.current_question}"
+        )
 
-    selected_key = st.radio(
-        t["select_answer"],
-        options=list(options_dict.keys()),
-        format_func=format_option,
-        key=f"q_{st.session_state.current_question}"
-    )
-
-    if st.button(t["submit_answer"], key=f"submit_{st.session_state.current_question}"):
-        is_correct = selected_key == q['correct']
-        st.session_state.user_answers.append({
-            "question": q['question'],
-            "selected": options_dict[selected_key],
-            "selected_key": selected_key,
-            "correct": options_dict[q['correct']],
-            "correct_key": q['correct'],
-            "explanation": q['explanation'],
-            "is_correct": is_correct
-        })
-        if is_correct:
-            st.session_state.score += 1
-            st.success(t["correct"])
-        else:
-            st.error(t["incorrect"].format(correct=q['correct']))
-        st.markdown(f"**{t['explanation']}** {q['explanation']}")
-        if st.session_state.current_question < len(st.session_state.questions) - 1:
-            st.session_state.current_question += 1
-            st.rerun()
-        else:
+        if st.button(t["submit_answer"], key=f"submit_{st.session_state.current_question}"):
+            is_correct = selected_key == q['correct']
+            st.session_state.user_answers.append({
+                "question": q['question'],
+                "selected": options_dict[selected_key],
+                "selected_key": selected_key,
+                "correct": options_dict.get(q['correct'], "N/A"),
+                "correct_key": q['correct'],
+                "explanation": q['explanation'],
+                "is_correct": is_correct
+            })
+            if is_correct:
+                st.session_state.score += 1
+                st.success(t["correct"])
+            else:
+                st.error(t["incorrect"].format(correct=q['correct']))
+            st.markdown(f"**{t['explanation']}** {q['explanation']}")
+            if st.session_state.current_question < len(st.session_state.questions) - 1:
+                st.session_state.current_question += 1
+                st.rerun()
+            else:
+                st.session_state.quiz_complete = True
+                st.rerun()
+                
+    except Exception as e:
+        st.error(t["question_error"].format(error=str(e)))
+        st.session_state.current_question += 1
+        if st.session_state.current_question >= len(st.session_state.questions):
             st.session_state.quiz_complete = True
-            st.rerun()
+        st.rerun()
 
 # Quiz Completion Screen
 if st.session_state.quiz_complete:
