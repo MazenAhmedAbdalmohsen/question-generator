@@ -384,7 +384,7 @@ if st.session_state.questions and not st.session_state.quiz_complete:
         st.subheader(t["question_format"].format(
             current=st.session_state.current_question + 1,
             total=len(st.session_state.questions)
-        )
+        ))
 
         difficulty_color = 'green' if q['difficulty'] == 'easy' else 'orange' if q['difficulty'] == 'mid' else 'red'
         st.markdown(f"**{t['difficulty']}:** :{difficulty_color}[{q['difficulty'].upper()}]")
