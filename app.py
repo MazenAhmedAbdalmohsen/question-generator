@@ -6,9 +6,8 @@ import google.generativeai as genai
 import os
 import time
 
-# --- MUST BE FIRST STREAMLIT COMMAND ---
+# MUST BE FIRST COMMAND
 st.set_page_config(page_title="AI Quiz Generator", layout="wide")
-# ---------------------------------------
 
 # Initialize session state
 if 'questions' not in st.session_state:
@@ -105,7 +104,24 @@ def generate_questions(text, total_questions, easy_pct, mid_pct, hard_pct):
     num_mid = int(total_questions * (mid_pct / 100))
     num_hard = total_questions - num_easy - num_mid
 
-    prompt = f"""Generate {total_questions} multiple choice questions as a JSON array from this text:
+    if st.session_state.language == "ar":
+        prompt = f"""قم بإنشاء {total_questions} أسئلة اختيار من متعدد بصيغة JSON من النص التالي:
+{text[:3000]}
+كل سؤال يجب أن يكون بهذا الشكل:
+{{
+    "question": "...",
+    "options": ["A", "B", "C", "D"],
+    "correct": "A",
+    "difficulty": "easy|mid|hard",
+    "explanation": "..."
+}}
+المتطلبات:
+- {num_easy} أسئلة سهلة (استرجاع بسيط)
+- {num_mid} أسئلة متوسطة (تطبيق)
+- {num_hard} أسئلة صعبة (تحليل)
+- لا تُرجع سوى المصفوفة JSON، ولا شيء آخر"""
+    else:
+        prompt = f"""Generate {total_questions} multiple choice questions as a JSON array from this text:
 {text[:3000]}
 Format each question like this:
 {{
